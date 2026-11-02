@@ -20,12 +20,12 @@ if [[ ! -e .git ]]; then
   git init --initial-branch=main
 fi
 if [[ "$(git rev-parse --show-toplevel)" != "$PROJECT_ROOT" ]]; then
-  echo "Run this script from its own robin-hood checkout." >&2
+  echo "Run this script from its own robinhood checkout." >&2
   exit 1
 fi
 if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
   git symbolic-ref HEAD refs/heads/main
-  git commit --allow-empty -m "chore: initialize robin-hood repository"
+  git commit --allow-empty -m "chore: initialize robinhood repository"
 fi
 git rev-parse --verify main >/dev/null
 CURRENT_BRANCH="$(git branch --show-current)"
@@ -45,7 +45,7 @@ if git show-ref --verify --quiet "refs/heads/$FEATURE_BRANCH"; then
 else
   git switch -c "$FEATURE_BRANCH"
 fi
-git add -- .gitignore README.md SPEC.md docs deploy pipeline tests scripts robin-hood-server robin-hood-web site/index.html site/assets
+git add -- .gitignore README.md SPEC.md docs deploy pipeline tests scripts robinhood-server robinhood-web site/index.html site/assets
 
 # Inspect the actual index, including any files staged before this script.
 # Report paths/pattern names only, never matching credential values.
@@ -103,7 +103,7 @@ if [[ -n "$EXISTING_PR" ]]; then
   echo "$EXISTING_PR"
   exit 0
 fi
-PR_BODY="$(mktemp "${TMPDIR:-/tmp}/robin-hood-pr.XXXXXX")"
+PR_BODY="$(mktemp "${TMPDIR:-/tmp}/robinhood-pr.XXXXXX")"
 trap 'rm -f "$PR_BODY"' EXIT
 cat > "$PR_BODY" <<'BODY'
 Implements 나랏일보고서 as a responsive React/TypeScript dashboard and FastAPI service using the collected public-spending data.

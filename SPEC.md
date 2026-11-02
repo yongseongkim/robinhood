@@ -51,7 +51,7 @@ The MVP scope is National Assembly members plus Seoul local councils.
 | R4 | Screens: official detail, merchant detail, finding detail, as listed in §7. Make clear what the data shows and what it does not. | Done in code; review/correction history open |
 | R5 | Legal and reliability review: 정치자금법, 공직선거법, 업무추진비 집행 규칙, 회계관리 훈령, council disclosure ordinances, 개인정보 보호법, public-data reuse terms, information-disclosure rules, plus the six questions in the brief (republishing disclosed data, restricted fields, attribution to individuals, corrections, explaining repeated merchants, audit findings vs statistical outliers). | Done (`docs/legal-notes.json`) |
 | R6 | MVP roadmap: collect and normalize, then basic analysis, then detection, then service (official page, merchant search, source per transaction, review and correction). | Phases 1–3 done; Phase 4 partly (review/correction open) |
-| R7 | Originally static-only; superseded on 2026-10-31 by the explicit request for a server/job and web application. | Implemented: `robin-hood-server` (FastAPI, PostgreSQL storage, collector CLI) and `robin-hood-web` (React, TypeScript, Vite). Legacy `site/` remains usable. |
+| R7 | Originally static-only; superseded on 2026-10-31 by the explicit request for a server/job and web application. | Implemented: `robinhood-server` (FastAPI, PostgreSQL storage, collector CLI) and `robinhood-web` (React, TypeScript, Vite). Legacy `site/` remains usable. |
 | R8 | Map-based regional view of representatives' spending, so people can check their own district. | Done (우리 동네 + map). The design adds a 읍·면·동 → 선거구 step. |
 | R9 | Keep finding more data to collect. | Ongoing (§5) |
 | R10 | Use an OCR tool for scanned PDFs. | Done (Apple Vision, `pipeline/ocr.py`, `pipeline/parse_ocr.py`) |
@@ -70,8 +70,8 @@ The MVP scope is National Assembly members plus Seoul local councils.
 | R23 | Use one example-data wireframe set, merge duplicate pages and group sections/pages on the canvas. | Done: 40 screens consolidated to 10 desktop + 2 mobile; five page sections plus orientation/components (§7). |
 | R24 | Use NAVER Maps for 자주 결제한 장소. | SDK adapter implemented with `ncpKeyId`, regional clusters, map/list sync and boundary-map fallback. Live authentication requires an application key and registered service URL; exact merchant coordinates remain unavailable. |
 | R25 | State whether spending is monthly, annual, a selected-period total or a single transaction. | Reflected in scope bars, metric labels, ranking/table headers, merchant cards and desktop/mobile charts; definitions below. |
-| R26 | Implement the agreed design as server/API/collector jobs and web; choose project naming. | Implemented as `robin-hood-server` and `robin-hood-web`. Public name remains 나랏일보고서. Periodic collection is an explicit worker command; no daemon or live schedule was installed. |
-| R27 | Store service data in the existing main PostgreSQL and configure periodic update jobs. | Implemented: isolated `robin_hood` schema, JSONB/relations, COPY publication in one transaction, request-level repeatable reads, shared advisory lock, durable run history/schedule, retries, and Linux service definitions. Existing supported collector scope remains explicit. Operational connection and service activation await deployment configuration. |
+| R26 | Implement the agreed design as server/API/collector jobs and web; choose project naming. | Implemented as `robinhood-server` and `robinhood-web`. Public name remains 나랏일보고서. Periodic collection is an explicit worker command; no daemon or live schedule was installed. |
+| R27 | Store service data in the existing main PostgreSQL and configure periodic update jobs. | Implemented: isolated `robinhood` schema, JSONB/relations, COPY publication in one transaction, request-level repeatable reads, shared advisory lock, durable run history/schedule, retries, and Linux service definitions. Existing supported collector scope remains explicit. Operational connection and service activation await deployment configuration. |
 | R28 | Use Codex only to correct extracted OCR wording/table text; preserve original documents and avoid PDF/image model input. | Implemented as an optional server-job stage: bounded text-only SDK calls, separate correction records, source/extraction hash checks, protected numerical/attribution fields, cached reviews, and normalization overlays. Raw/staging files are preserved; actual model execution awaits SDK/login configuration and activation. |
 
 ## 3. Principles and constraints
@@ -196,8 +196,8 @@ Implemented: 28 rules producing 4,705 flags. The table shows their group on the 
 - Merchant details show spending records, report-name counts, monthly trends, matching confidence and source transactions.
 - Findings expose the rule, observed values, comparison basis, evidence, normal explanations, source quality and review state within the methods or transaction context.
 
-**Web, current code** (`robin-hood-web/`)
-- The grouped Pencil architecture is implemented as responsive routes and tab/filter states, backed by the collected data through `robin-hood-server`. See each package README for setup, API and limitations. The legacy static site retains its own routes and navigation.
+**Web, current code** (`robinhood-web/`)
+- The grouped Pencil architecture is implemented as responsive routes and tab/filter states, backed by the collected data through `robinhood-server`. See each package README for setup, API and limitations. The legacy static site retains its own routes and navigation.
 
 **Canonical wireframes** (`robinhood.pen` in Pencil)
 - One wireframe set uses pseudonymous example names with collected fields and snapshot values. There are no separate legacy, example-data or real-data page sets.
@@ -400,7 +400,7 @@ Decisions made while we worked, with the reason behind each. Technical detail li
 ## 9. Current state
 
 - **Pipeline:** Python in `pipeline/`. Run everything with `pipeline/run_all.sh`. Scanned PDFs are read with Apple Vision OCR (`pipeline/ocr.py`). Tests in `tests/` (36 passing).
-- **Web/API:** React·TypeScript in `robin-hood-web`, FastAPI in `robin-hood-server`; actual normalized records are loaded into PostgreSQL through atomic COPY publication (SQLite is offline development/scratch only). The API also serves the production web build. Legacy `site/` remains available for static/file use.
+- **Web/API:** React·TypeScript in `robinhood-web`, FastAPI in `robinhood-server`; actual normalized records are loaded into PostgreSQL through atomic COPY publication (SQLite is offline development/scratch only). The API also serves the production web build. Legacy `site/` remains available for static/file use.
 - **Credentials:** `credentials.yaml`, encrypted with SOPS + GCP KMS.
 - **Design:** one grouped Pencil wireframe set, 10 desktop + 2 mobile, implemented as ten responsive page types with tabs and filters. Default display names are pseudonymous; amounts, dates and source fields are collected data.
 - **Collection:** CLI `migrate`, `index`, `collect`, `collect --no-fetch`, `run-due`, `ocr-correct --plan`, and `worker --interval-hours 24`. A shared lock prevents concurrent writers. Failed runs keep the previous published database. PostgreSQL stores run history and next-run timing; retries are 1/5/15 minutes and a restart preserves the schedule. Systemd services are provided but not activated.

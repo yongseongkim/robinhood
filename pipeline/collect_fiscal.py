@@ -51,7 +51,7 @@ class Api:
     def __init__(self, key):
         self.key = key
         self.s = requests.Session()
-        self.s.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robin-hood-collector"
+        self.s.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robinhood-collector"
 
     def _get(self, svc, params):
         for attempt in range(4):

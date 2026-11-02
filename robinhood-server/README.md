@@ -1,24 +1,24 @@
-# robin-hood-server
+# robinhood-server
 
-나랏일보고서의 FastAPI 읽기 API와 수집 작업입니다. 운영 데이터는 기존 메인 PostgreSQL의 전용 `robin_hood` 스키마에 저장합니다. `DATABASE_URL`이 없을 때만 로컬 SQLite를 사용하는 개발 모드입니다. PostgreSQL을 설정한 상태에서 연결이 실패하면 SQLite로 전환하지 않습니다.
+나랏일보고서의 FastAPI 읽기 API와 수집 작업입니다. 운영 데이터는 기존 메인 PostgreSQL의 전용 `robinhood` 스키마에 저장합니다. `DATABASE_URL`이 없을 때만 로컬 SQLite를 사용하는 개발 모드입니다. PostgreSQL을 설정한 상태에서 연결이 실패하면 SQLite로 전환하지 않습니다.
 
 ## PostgreSQL 연결과 최초 적재
 
 Python 3.12+, uv, macOS/Linux가 필요합니다. 저장소 디렉터리 구조를 유지하세요.
 
 ```bash
-cd robin-hood-server
+cd robinhood-server
 uv sync
 cp .env.example .env
 # .env의 DATABASE_URL을 배포 환경의 비밀 관리 도구로 설정
-uv run --env-file .env robin-hood migrate
-uv run --env-file .env robin-hood index
-uv run --env-file .env robin-hood serve
+uv run --env-file .env robinhood migrate
+uv run --env-file .env robinhood index
+uv run --env-file .env robinhood serve
 ```
 
-`DATABASE_URL`은 기존 메인 DB를 가리킵니다. DB 이름을 바꾸거나 새 DB를 만들 필요가 없습니다. 기본 `ROBIN_HOOD_DATABASE_SCHEMA=robin_hood`만 별도로 사용하며 `public` 등 시스템/공용 스키마는 허용하지 않습니다. 운영 API와 수집 역할을 나누려면 API 조회용 URL을 `DATABASE_URL`, 적재·마이그레이션·수집 잠금용 URL을 `ROBIN_HOOD_JOB_DATABASE_URL`에 설정합니다. 두 URL은 같은 DB·스키마를 가리켜야 합니다. URL에는 비밀번호가 포함될 수 있으므로 저장소에 커밋하지 않습니다.
+`DATABASE_URL`은 기존 메인 DB를 가리킵니다. DB 이름을 바꾸거나 새 DB를 만들 필요가 없습니다. 기본 `ROBINHOOD_DATABASE_SCHEMA=robinhood`만 별도로 사용하며 `public` 등 시스템/공용 스키마는 허용하지 않습니다. 운영 API와 수집 역할을 나누려면 API 조회용 URL을 `DATABASE_URL`, 적재·마이그레이션·수집 잠금용 URL을 `ROBINHOOD_JOB_DATABASE_URL`에 설정합니다. 두 URL은 같은 DB·스키마를 가리켜야 합니다. URL에는 비밀번호가 포함될 수 있으므로 저장소에 커밋하지 않습니다.
 
-API는 `/api/docs`에 명세를 제공하고, 웹 빌드가 있으면 같은 서버가 `robin-hood-web/dist`도 제공합니다. 설정 파일은 uv의 `--env-file` 옵션으로 읽으며 운영에서는 환경변수를 직접 주입할 수 있습니다.
+API는 `/api/docs`에 명세를 제공하고, 웹 빌드가 있으면 같은 서버가 `robinhood-web/dist`도 제공합니다. 설정 파일은 uv의 `--env-file` 옵션으로 읽으며 운영에서는 환경변수를 직접 주입할 수 있습니다.
 
 ## 저장 구조와 발행
 
@@ -31,7 +31,7 @@ API는 `/api/docs`에 명세를 제공하고, 웹 빌드가 있으면 같은 서
 
 발행은 하나의 PostgreSQL 트랜잭션에서 처리합니다. 기존 데이터 삭제와 새 적재 중 하나라도 실패하면 모두 롤백합니다. 읽기 API는 요청마다 `REPEATABLE READ READ ONLY` 트랜잭션을 사용하므로 한 응답에서 이전 자료와 새 자료가 섞이지 않습니다. 이 동작을 위해 TRUNCATE 대신 DELETE를 사용합니다. 운영 DB의 autovacuum을 유지하세요. 모든 변경은 전용 서비스 스키마 안에서 이뤄집니다.
 
-세션 advisory lock으로 여러 호스트의 수집·인덱싱 중복을 막습니다. 발행은 잠금을 소유한 동일 연결에서 수행합니다. 이 연결이 끊어지면 새 연결로 발행을 강행하지 않고 실패합니다. 수집 URL에는 직접 연결 또는 세션 풀을 사용해야 합니다. 트랜잭션 풀 방식 PgBouncer를 API에 쓰는 경우 `ROBIN_HOOD_JOB_DATABASE_URL`을 직접 연결로 분리하세요.
+세션 advisory lock으로 여러 호스트의 수집·인덱싱 중복을 막습니다. 발행은 잠금을 소유한 동일 연결에서 수행합니다. 이 연결이 끊어지면 새 연결로 발행을 강행하지 않고 실패합니다. 수집 URL에는 직접 연결 또는 세션 풀을 사용해야 합니다. 트랜잭션 풀 방식 PgBouncer를 API에 쓰는 경우 `ROBINHOOD_JOB_DATABASE_URL`을 직접 연결로 분리하세요.
 
 ## 주기 실행
 
@@ -43,15 +43,15 @@ uv pip install --python .venv/bin/python -r pipeline/requirements.txt
 ```
 
 ```bash
-# robin-hood-server/에서
-uv run --env-file .env robin-hood collect
-uv run --env-file .env robin-hood collect --no-fetch
-uv run --env-file .env robin-hood worker --interval-hours 24
+# robinhood-server/에서
+uv run --env-file .env robinhood collect
+uv run --env-file .env robinhood collect --no-fetch
+uv run --env-file .env robinhood worker --interval-hours 24
 ```
 
 worker는 저장된 다음 실행 시각을 30초마다 확인합니다. 처음에는 즉시 수집하고, 성공하면 완료 시점으로부터 24시간 뒤에 실행합니다. 재시작해도 DB의 다음 실행 시각을 존중합니다. 실패하면 1분·5분·15분 간격으로 최대 세 번 재시도하고, 모두 실패하면 다음 정규 주기로 넘깁니다. 재시도에서는 수집 파이프라인 전체를 다시 실행하며 기존 원본·첨부 캐시는 재사용합니다.
 
-외부 CronJob/스케줄러에서는 `robin-hood run-due`를 1분마다 실행할 수 있습니다. DB에서 실행 시각을 확인하고 다른 수집자가 있으면 건너뛰므로 worker와 같은 중복 방지 규칙을 따릅니다. `collect`는 시각과 관계없이 한 번 실행하는 운영 명령입니다.
+외부 CronJob/스케줄러에서는 `robinhood run-due`를 1분마다 실행할 수 있습니다. DB에서 실행 시각을 확인하고 다른 수집자가 있으면 건너뛰므로 worker와 같은 중복 방지 규칙을 따릅니다. `collect`는 시각과 관계없이 한 번 실행하는 운영 명령입니다.
 
 SIGTERM/SIGINT는 진행 중 작업을 마친 후 종료합니다. 작업이 2시간을 넘기면 수집 프로세스 그룹을 종료하고 실패로 기록합니다. 이전 작업이 중단된 상태로 남았다면 다음 잠금 소유자가 이를 기록하고 재실행합니다. 로그는 `var/logs/`에 권한 0600으로 저장합니다. API는 로그 본문이나 작업 시작 기능을 제공하지 않습니다.
 
@@ -76,15 +76,15 @@ Linux 상시 실행 설정과 DB 역할 권한은 [배포 안내](../deploy/READ
 서버 수집 job에 `OCR 파싱 → Codex 텍스트 정정 → 정규화 → DB 발행` 단계를 연결했습니다. Codex에는 추출된 표의 텍스트만 전달합니다. PDF·이미지·파일 경로·원문 URL·상세 주소는 입력에서 제외하고 읽기 전용 임시 작업 공간에서 실행합니다. 원본 PDF/XLSX/API 자료와 `data/staging/*_ocr.jsonl`은 이 단계에서 덮어쓰지 않습니다.
 
 ```bash
-# robin-hood-server/에서
+# robinhood-server/에서
 uv sync --extra ocr-correction
 # 모델 호출·DB 저장 없이 대상과 입력 크기만 확인
-uv run --env-file .env robin-hood ocr-correct --plan
+uv run --env-file .env robinhood ocr-correct --plan
 # 설정을 활성화한 후, 기존 수집 job에서 자동 호출
-uv run --env-file .env robin-hood worker --interval-hours 24
+uv run --env-file .env robinhood worker --interval-hours 24
 ```
 
-`ROBIN_HOOD_OCR_CORRECTION_ENABLED=true`로 활성화합니다. `second-brain`과 같은 Codex Python SDK 방식이며 ChatGPT 로그인 상태를 확인합니다. API 키 인증으로 전환하지 않습니다. 전용 `ROBIN_HOOD_OCR_CODEX_HOME`에 정상 로그인된 실행 환경을 준비하세요. 사용량은 해당 계정의 한도에 따릅니다. 모델을 지정하지 않으면 계정의 기본 설정을 사용하며, 재현 가능한 운영 설정에는 `ROBIN_HOOD_OCR_MODEL`을 고정하는 편이 좋습니다.
+`ROBINHOOD_OCR_CORRECTION_ENABLED=true`로 활성화합니다. `second-brain`과 같은 Codex Python SDK 방식이며 ChatGPT 로그인 상태를 확인합니다. API 키 인증으로 전환하지 않습니다. 전용 `ROBINHOOD_OCR_CODEX_HOME`에 정상 로그인된 실행 환경을 준비하세요. 사용량은 해당 계정의 한도에 따릅니다. 모델을 지정하지 않으면 계정의 기본 설정을 사용하며, 재현 가능한 운영 설정에는 `ROBINHOOD_OCR_MODEL`을 고정하는 편이 좋습니다.
 
 기본 한 번에 5묶음, 묶음당 최대 40행·20,000자, 호출당 120초로 제한합니다. 원본 내용·추출 결과·프롬프트·모델 설정이 같은 완료 기록은 다시 호출하지 않습니다. 초기 자료가 많으면 여러 번에 나눠 처리하며 한도를 넘는 자료는 정정 전 OCR 값으로 남습니다. 수동 `ocr-correct`는 정정본만 준비하고, 다음 `collect --no-fetch`/수집 작업의 정규화에서 반영합니다.
 
@@ -108,7 +108,7 @@ PostgreSQL `ocr_corrections`에 원본 해시, 추출 행 사본, 프롬프트·
 | `/fiscal`, `/sources`, `/findings` | 재정통계·출처·규칙·확인 표시 |
 | `/jobs/status`, `/jobs/history?limit=20` | 최근 실행 상태·다음 실행·실행 이력 |
 
-금액 단위는 원입니다. 응답의 `scope`에 날짜·집계 종류·재원·보고서 ID가 포함됩니다. 재원을 합산하지 않고, 재수록 중복·문서 기간 밖 날짜는 합계에서 제외합니다. 빠진 달의 금액은 null입니다. 이름은 기본 가명이고 `ROBIN_HOOD_PSEUDONYMS=false`일 때 공개 자료의 원래 이름을 사용합니다. 가명은 표시 선택이며 익명화 보장이 아닙니다. 사업자번호 마스킹은 유지합니다.
+금액 단위는 원입니다. 응답의 `scope`에 날짜·집계 종류·재원·보고서 ID가 포함됩니다. 재원을 합산하지 않고, 재수록 중복·문서 기간 밖 날짜는 합계에서 제외합니다. 빠진 달의 금액은 null입니다. 이름은 기본 가명이고 `ROBINHOOD_PSEUDONYMS=false`일 때 공개 자료의 원래 이름을 사용합니다. 가명은 표시 선택이며 익명화 보장이 아닙니다. 사업자번호 마스킹은 유지합니다.
 
 운영 모니터링에서는 `/api/health`와 `/jobs/status`의 `state`, `stage`, `attempt`, `nextRunAt`, 원자료 시각을 확인하세요. 별도의 알림 발송 연동은 설치하지 않았습니다.
 
@@ -126,5 +126,5 @@ TEST_POSTGRES_URL='postgresql://...' uv run pytest -q tests/test_postgres.py
 # 저장소 루트에서, 선택 사항
 npm install --prefix .artifacts/pg-test --no-save @electric-sql/pglite@0.3.15
 PGLITE_MODULE="$PWD/.artifacts/pg-test/node_modules/@electric-sql/pglite/dist/index.js" \
-  robin-hood-server/.venv/bin/python robin-hood-server/tests/pg_engine_smoke.py
+  robinhood-server/.venv/bin/python robinhood-server/tests/pg_engine_smoke.py
 ```

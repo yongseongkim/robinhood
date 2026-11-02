@@ -35,7 +35,7 @@ def list_issues(session):
 
 def main():
     s = requests.Session()
-    s.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robin-hood-collector"
+    s.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robinhood-collector"
     OUT.mkdir(parents=True, exist_ok=True)
     manifest_path = OUT / "manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else []

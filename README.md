@@ -1,41 +1,41 @@
 # 나랏일보고서 · robinhood
 
-국회의원 정치자금, 지방의회 경비, 신고재산, 법안·표결과 국가재정을 기간·재원·출처별로 조회하는 대시보드입니다. 저장소는 [robinhood](https://github.com/yongseongkim/robinhood), 공개 서비스 이름은 나랏일보고서입니다. 서버·웹 디렉터리와 패키지는 기존 `robin-hood` 이름을 사용합니다.
+국회의원 정치자금, 지방의회 경비, 신고재산, 법안·표결과 국가재정을 기간·재원·출처별로 조회하는 대시보드입니다. 저장소는 [robinhood](https://github.com/yongseongkim/robinhood), 공개 서비스 이름은 나랏일보고서입니다. 서버·웹 패키지는 각각 `robinhood-server`와 `robinhood-web`입니다.
 
 ## 새 웹과 API 실행
 
-Pencil의 통합 화면을 `robin-hood-web`(React·TypeScript)과 `robin-hood-server`(FastAPI·PostgreSQL)로 구현했습니다. 실제 수집본을 읽으며 인물·상호의 표시 이름은 기본 가명입니다. 기존 `pipeline/`과 원본 데이터는 계속 사용합니다.
+Pencil의 통합 화면을 `robinhood-web`(React·TypeScript)과 `robinhood-server`(FastAPI·PostgreSQL)로 구현했습니다. 실제 수집본을 읽으며 인물·상호의 표시 이름은 기본 가명입니다. 기존 `pipeline/`과 원본 데이터는 계속 사용합니다.
 
 수집한 원본·가공 데이터, 로컬 DB, 생성된 `site/data/`, 인증정보와 캐시는 Git에 포함하지 않습니다. 새 체크아웃에서는 기존 데이터 볼륨을 복원하거나 아래 수집 파이프라인을 실행한 뒤 조회 인덱스를 생성해야 합니다. 데이터가 없는 동안 API의 준비 상태는 503입니다. 격리된 예제 입력을 사용하는 테스트는 수집 자료 없이 실행할 수 있고, 실제 수집본 대조 테스트는 인덱스가 있을 때 실행됩니다.
 
 ```bash
 # 터미널 1 · Python 3.12+ / uv
-cd robin-hood-server
+cd robinhood-server
 uv sync
 # 운영 DB를 쓰려면 .env.example을 .env로 복사하고 DATABASE_URL 설정
-uv run --env-file .env robin-hood migrate
-uv run --env-file .env robin-hood index
-uv run --env-file .env robin-hood serve
+uv run --env-file .env robinhood migrate
+uv run --env-file .env robinhood index
+uv run --env-file .env robinhood serve
 ```
 
 ```bash
 # 터미널 2 · Node.js 22.12+
-cd robin-hood-web
+cd robinhood-web
 npm ci
 npm run dev
 ```
 
-기존 메인 PostgreSQL의 `robin_hood` 전용 스키마를 사용합니다. DB URL 없이 로컬 SQLite로 확인하려면 `--env-file .env`와 `migrate`를 생략하세요. 실제 운영 연결·상시 실행 안내는 [배포 안내](deploy/README.md)에 있습니다.
+기존 메인 PostgreSQL의 `robinhood` 전용 스키마를 사용합니다. DB URL 없이 로컬 SQLite로 확인하려면 `--env-file .env`와 `migrate`를 생략하세요. 실제 운영 연결·상시 실행 안내는 [배포 안내](deploy/README.md)에 있습니다.
 
 웹은 `http://localhost:5173`, API 명세는 `http://localhost:8000/api/docs`입니다. 웹에서 `npm run build`를 실행하면 API 서버의 `http://localhost:8000`에서도 웹을 제공합니다. 개발 프록시는 같은 출처의 `/api` 요청을 API 서버로 전달합니다.
 
 - 화면: 내 지역 지도, 의원·정당 목록과 프로필, 지방의회 직책 경비, Top 10·항목·월별 그래프, 자주 결제한 장소와 거래 상세, 나라 살림, 데이터·출처·분석 기준.
 - OCR 정정: 서버 job에서 추출된 표 텍스트만 Codex로 정리하는 선택 단계를 제공합니다. 원문은 보존하고 정정 이력을 따로 저장합니다. SDK·ChatGPT 로그인과 기능 활성화가 필요합니다.
-- 주기 수집: 서버 디렉터리에서 `uv run --env-file .env robin-hood worker --interval-hours 24`. DB에 다음 실행 시각·이력을 저장하고 실패 시 1·5·15분 재시도합니다. Linux 서비스 설정은 `deploy/systemd/`에 준비했으며 실제 활성화는 아직 하지 않았습니다.
-- 지도: `robin-hood-server/.env.example`의 `NAVER_MAPS_CLIENT_ID`를 설정하면 네이버 Maps SDK를 사용합니다. 키가 없으면 행정구역 지도를 표시합니다. 현재 장소 데이터는 구 단위이며 정확한 가게 좌표는 없습니다.
+- 주기 수집: 서버 디렉터리에서 `uv run --env-file .env robinhood worker --interval-hours 24`. DB에 다음 실행 시각·이력을 저장하고 실패 시 1·5·15분 재시도합니다. Linux 서비스 설정은 `deploy/systemd/`에 준비했으며 실제 활성화는 아직 하지 않았습니다.
+- 지도: `robinhood-server/.env.example`의 `NAVER_MAPS_CLIENT_ID`를 설정하면 네이버 Maps SDK를 사용합니다. 키가 없으면 행정구역 지도를 표시합니다. 현재 장소 데이터는 구 단위이며 정확한 가게 좌표는 없습니다.
 - 검증: 서버에서 `uv run pytest -q`, 웹에서 `npm run build`와 `npm run test:e2e`. 기존 파이프라인은 루트 `.venv/bin/python -m pytest -q tests`.
 
-설정·수집·API는 [서버 설명](robin-hood-server/README.md), 지도·경로·브라우저 검사는 [웹 설명](robin-hood-web/README.md)을 참고하세요. 아래 내용은 기존 정적 사이트와 수집 자료 설명입니다.
+설정·수집·API는 [서버 설명](robinhood-server/README.md), 지도·경로·브라우저 검사는 [웹 설명](robinhood-web/README.md)을 참고하세요. 아래 내용은 기존 정적 사이트와 수집 자료 설명입니다.
 
 ## 기존 정적 사이트
 
@@ -116,8 +116,8 @@ sops credentials.yaml                       # 편집기에서 값을 바꾸고 �
 
 ```
 pipeline/   수집·파싱·정규화·탐지·사이트 생성 (Python)
-robin-hood-server/  읽기 API·PostgreSQL 저장·주기 수집 worker (Python)
-robin-hood-web/     대시보드·지도·프로필·출처 (React·TypeScript)
+robinhood-server/  읽기 API·PostgreSQL 저장·주기 수집 worker (Python)
+robinhood-web/     대시보드·지도·프로필·출처 (React·TypeScript)
 data/raw/        원본 (수정하지 않음, manifest.json에 URL·sha256·수집 시각)
 data/staging/    지방의회 파서 출력 + 파싱 보고서
 data/normalized/ 정규화된 지출·주체·거래처·문서·탐지 결과

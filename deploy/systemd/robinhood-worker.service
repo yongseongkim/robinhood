@@ -5,11 +5,11 @@ After=network-online.target
 
 [Service]
 Type=simple
-User=robin-hood
-Group=robin-hood
-WorkingDirectory=/srv/robin-hood
-EnvironmentFile=/etc/robin-hood/worker.env
-ExecStart=/srv/robin-hood/robin-hood-server/.venv/bin/robin-hood worker --interval-hours 24
+User=robinhood
+Group=robinhood
+WorkingDirectory=/srv/robinhood
+EnvironmentFile=/etc/robinhood/worker.env
+ExecStart=/srv/robinhood/robinhood-server/.venv/bin/robinhood worker --interval-hours 24
 Restart=on-failure
 RestartSec=30
 # The worker finishes the current job on SIGTERM; child groups have a 2h timeout.
@@ -19,7 +19,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/srv/robin-hood/data /srv/robin-hood/site/data /var/lib/robin-hood
+ReadWritePaths=/srv/robinhood/data /srv/robinhood/site/data /var/lib/robinhood
 UMask=0077
 
 [Install]

@@ -5,11 +5,11 @@ After=network-online.target
 
 [Service]
 Type=simple
-User=robin-hood
-Group=robin-hood
-WorkingDirectory=/srv/robin-hood
-EnvironmentFile=/etc/robin-hood/api.env
-ExecStart=/srv/robin-hood/robin-hood-server/.venv/bin/robin-hood serve --host 127.0.0.1 --port 8000
+User=robinhood
+Group=robinhood
+WorkingDirectory=/srv/robinhood
+EnvironmentFile=/etc/robinhood/api.env
+ExecStart=/srv/robinhood/robinhood-server/.venv/bin/robinhood serve --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=10
 NoNewPrivileges=true

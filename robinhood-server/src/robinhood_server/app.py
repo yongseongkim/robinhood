@@ -92,7 +92,7 @@ def create_app(config: Settings = settings):
         return JSONResponse(
             {
                 "status": "ok" if ready else "data_unavailable",
-                "service": "robin-hood-server",
+                "service": "robinhood-server",
             },
             status_code=200 if ready else 503,
         )
@@ -333,9 +333,9 @@ def create_app(config: Settings = settings):
             return FileResponse(index)
         return JSONResponse(
             {
-                "service": "robin-hood-server",
+                "service": "robinhood-server",
                 "docs": "/api/docs",
-                "message": "웹은 robin-hood-web에서 실행하거나 빌드해 주세요.",
+                "message": "웹은 robinhood-web에서 실행하거나 빌드해 주세요.",
             }
         )
 

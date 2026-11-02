@@ -8,7 +8,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .artifacts/
-robin-hood-server/var/
+robinhood-server/var/
 .env
 .env.local
 .env.*.local

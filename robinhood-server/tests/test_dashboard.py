@@ -8,13 +8,13 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from robin_hood_server.app import create_app
-from robin_hood_server.config import Settings
-from robin_hood_server.index import build_index, collection_lock, public_merchant_id
-from robin_hood_server.jobs import collect
-from robin_hood_server.jobs import run_pipeline
-from robin_hood_server.db import connect
-from robin_hood_server.scopes import month_series, period, report_period
+from robinhood_server.app import create_app
+from robinhood_server.config import Settings
+from robinhood_server.index import build_index, collection_lock, public_merchant_id
+from robinhood_server.jobs import collect
+from robinhood_server.jobs import run_pipeline
+from robinhood_server.db import connect
+from robinhood_server.scopes import month_series, period, report_period
 
 
 def test_periods_and_missing_months():
@@ -157,10 +157,10 @@ def test_job_timeout_stops_the_crawler_process_group(monkeypatch):
     process.wait.side_effect = [subprocess.TimeoutExpired(["crawler"], 10), 0]
     calls = []
     monkeypatch.setattr(
-        "robin_hood_server.jobs.subprocess.Popen", lambda *a, **kw: process
+        "robinhood_server.jobs.subprocess.Popen", lambda *a, **kw: process
     )
     monkeypatch.setattr(
-        "robin_hood_server.jobs.os.killpg", lambda pid, sig: calls.append((pid, sig))
+        "robinhood_server.jobs.os.killpg", lambda pid, sig: calls.append((pid, sig))
     )
     with pytest.raises(subprocess.TimeoutExpired):
         run_pipeline(["crawler"], timeout=10)
@@ -171,7 +171,7 @@ def test_job_timeout_stops_the_crawler_process_group(monkeypatch):
 def real_api():
     config = replace(Settings(), database_url="", job_database_url="")
     if not config.database.is_file():
-        pytest.skip("Build the real-data index with robin-hood index first.")
+        pytest.skip("Build the real-data index with robinhood index first.")
     return TestClient(create_app(config))
 
 

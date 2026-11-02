@@ -200,7 +200,7 @@ def apply_rows(rows, overlay):
 
 def load_rows(path):
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    overlay_path = os.getenv("ROBIN_HOOD_OCR_CORRECTIONS", "")
+    overlay_path = os.getenv("ROBINHOOD_OCR_CORRECTIONS", "")
     if not overlay_path:
         return rows
     overlay = Path(overlay_path)

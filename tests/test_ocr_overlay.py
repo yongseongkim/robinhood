@@ -60,7 +60,7 @@ def test_normalization_uses_correction_without_changing_source_or_duplicate_logi
     path = tmp_path / "corrections.json"
     path.write_text(json.dumps(overlay, ensure_ascii=False))
     monkeypatch.setattr(normalize, "STAGING", tmp_path)
-    monkeypatch.setenv("ROBIN_HOOD_OCR_CORRECTIONS", str(path))
+    monkeypatch.setenv("ROBINHOOD_OCR_CORRECTIONS", str(path))
     normalized, _, _ = normalize.load_council("mapo")
     assert normalized[0]["description"] == "지역 주민 간담회"
     assert (

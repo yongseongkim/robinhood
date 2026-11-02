@@ -11,7 +11,7 @@ from .ocr_correction import run_corrections
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="robin-hood")
+    parser = argparse.ArgumentParser(prog="robinhood")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("index", help="이미 수집된 자료로 조회 인덱스 생성")
     sub.add_parser("migrate", help="서비스 전용 PostgreSQL 스키마 생성·마이그레이션")
@@ -48,7 +48,7 @@ def main():
         print(json.dumps(result, ensure_ascii=False))
     elif args.command == "migrate":
         if not settings.postgres:
-            parser.error("DATABASE_URL 또는 ROBIN_HOOD_DATABASE_URL을 설정해 주세요.")
+            parser.error("DATABASE_URL 또는 ROBINHOOD_DATABASE_URL을 설정해 주세요.")
         migrate(settings)
         print(
             json.dumps(
@@ -76,7 +76,7 @@ def main():
     else:
         import uvicorn
 
-        uvicorn.run("robin_hood_server.app:app", host=args.host, port=args.port)
+        uvicorn.run("robinhood_server.app:app", host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

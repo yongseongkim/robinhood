@@ -61,7 +61,7 @@ def main():
         print(f"열린국회정보 수집 건너뜀: {e}", file=sys.stderr)
         return
     s = requests.Session()
-    s.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robin-hood-collector"
+    s.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robinhood-collector"
     manifest = []
     members, total = fetch_all(s, key, "nwvrqwxyaytdsfvhu", MEMBER_FIELDS, page_size=300)
     manifest.append(save("members_current", members, "nwvrqwxyaytdsfvhu", {}, total))

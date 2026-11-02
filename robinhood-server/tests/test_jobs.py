@@ -4,8 +4,8 @@ import subprocess
 
 import pytest
 
-from robin_hood_server.jobs import collect, run_due, validate_policy
-from robin_hood_server.job_store import get_schedule, latest
+from robinhood_server.jobs import collect, run_due, validate_policy
+from robinhood_server.job_store import get_schedule, latest
 
 
 class Clock:
