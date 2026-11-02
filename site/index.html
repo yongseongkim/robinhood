@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robin Hood — 공공 지출 열람실</title>
+<meta name="description" content="국회의원 정치자금과 지방의회 업무추진비 공개 기록을 한 줄씩 읽고, 추가 확인이 필요한 지출 패턴을 근거와 함께 보여주는 열람실.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231e4d33'/%3E%3Crect x='6' y='17' width='20' height='7' rx='2' fill='%23ffe45c'/%3E%3Ctext x='16' y='22' font-size='16' text-anchor='middle' font-family='serif' font-weight='700' fill='%23f3f6f2'%3ER%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="wordmark" href="#/"><b>Robin Hood</b><span>공공 지출 열람실</span></a>
+    <nav class="nav" aria-label="주 메뉴">
+      <a href="#/region">우리 동네</a>
+      <a href="#/budget">나라 살림</a>
+      <a href="#/money">정치인의 돈</a>
+      <a href="#/rank">순위판</a>
+      <a href="#/outliers">많이 쓴 곳</a>
+      <a href="#/rules">탐지 규칙</a>
+      <a href="#/sources">데이터 출처</a>
+      <a href="#/guide">읽는 법</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="화면 밝기 전환">밝게/어둡게</button>
+    </nav>
+  </div>
+</header>
+<main id="main" tabindex="-1"><p class="loading">자료를 불러오는 중입니다…</p></main>
+<footer class="footer">
+  <div class="footer-inner">
+    <p>Robin Hood의 표시는 공개된 기록에서 계산한 <b>추가 확인이 필요한 패턴</b>입니다. 법령 위반이나 부정행위가 확인되었다는 뜻이 아닙니다. 확정된 감사 결과와 통계적 특이점은 구분해서 표시합니다.</p>
+    <p id="footer-meta"></p>
+  </div>
+</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

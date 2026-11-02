@@ -1,0 +1,26 @@
+[Unit]
+Description=나랏일보고서 periodic data collection
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=robin-hood
+Group=robin-hood
+WorkingDirectory=/srv/robin-hood
+EnvironmentFile=/etc/robin-hood/worker.env
+ExecStart=/srv/robin-hood/robin-hood-server/.venv/bin/robin-hood worker --interval-hours 24
+Restart=on-failure
+RestartSec=30
+# The worker finishes the current job on SIGTERM; child groups have a 2h timeout.
+TimeoutStopSec=130min
+KillMode=mixed
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/robin-hood/data /srv/robin-hood/site/data /var/lib/robin-hood
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
