@@ -26,7 +26,7 @@ def get(name, env_var=None):
     if os.environ.get(env_var):
         return os.environ[env_var]
     if not CRED_FILE.exists():
-        raise MissingCredential(f"{CRED_FILE.relative_to(ROOT)} 이 없습니다. README의 'API 인증키 (SOPS)' 절을 보세요.")
+        raise MissingCredential(f"{CRED_FILE.relative_to(ROOT)} 이 없습니다. docs/INSTALL.md의 'API 인증키' 절을 보세요.")
     try:
         r = subprocess.run(["sops", "decrypt", "--extract", json.dumps([name]), str(CRED_FILE)],
                            capture_output=True, text=True, timeout=30)
