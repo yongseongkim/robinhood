@@ -1,6 +1,6 @@
 # 설계 메모
 
-운영 구성은 `robin-hood-server`(FastAPI·PostgreSQL·수집 worker)와 `robin-hood-web`(React·TypeScript)입니다. 기존 메인 PostgreSQL의 전용 `robin_hood` 스키마에 저장합니다. `DATABASE_URL`이 없는 로컬 개발에서만 SQLite를 사용합니다. 이전 `site/`는 별도 정적 배포용으로 유지합니다.
+운영 구성은 `robinhood-server`(FastAPI·PostgreSQL·수집 worker)와 `robinhood-web`(React·TypeScript)입니다. 기존 메인 PostgreSQL의 전용 `robinhood` 스키마에 저장합니다. `DATABASE_URL`이 없는 로컬 개발에서만 SQLite를 사용합니다. 이전 `site/`는 별도 정적 배포용으로 유지합니다.
 
 ```text
 raw → staging → normalized + findings → 검증용 임시 인덱스
@@ -17,7 +17,7 @@ worker는 DB의 `job_schedule`을 30초마다 확인합니다. 성공 완료 후
 
 웹 개발 시 Vite가 `/api`를 프록시하고 운영 빌드는 API가 정적 파일과 SPA fallback으로 제공합니다. 응답 `scope`는 재원·시작·종료일과 보고분·월·연간·기준일을 명시하며 재원은 합산하지 않고 결측 금액은 null입니다. 가명은 표시 계층의 선택이고 원본은 보존합니다. NAVER Maps에는 공개 키 ID와 구별 대표 좌표를 사용합니다. 가게 정확 좌표·Geocoding·Toss 플랫폼 연동은 별도 범위입니다.
 
-전체 수집기의 지원 연도·첨부 캐시·인증키·macOS OCR 조건은 [서버 안내](../robin-hood-server/README.md)에 명시했습니다. 배치 성공을 모든 출처가 최신이라는 보장으로 쓰지 않습니다. 운영 권한과 실행 방법은 [배포 안내](../deploy/README.md)에 있습니다.
+전체 수집기의 지원 연도·첨부 캐시·인증키·macOS OCR 조건은 [서버 안내](../robinhood-server/README.md)에 명시했습니다. 배치 성공을 모든 출처가 최신이라는 보장으로 쓰지 않습니다. 운영 권한과 실행 방법은 [배포 안내](../deploy/README.md)에 있습니다.
 
 ## OCR 정정 계층
 
@@ -25,7 +25,7 @@ worker는 DB의 `job_schedule`을 30초마다 확인합니다. 성공 완료 후
 
 `ocr_corrections`는 `doc_id`, 원본/추출 해시, 프롬프트·모델 설정, 추출 행 사본, 수정 전후·근거·검증 결과를 저장합니다. 조회 테이블을 교체할 때 유지되는 별도 감사 이력입니다. 검증된 텍스트 정정본을 `var/ocr-corrections.json`으로 내보내고 정규화가 추출 행의 해시를 대조해 적용합니다. 정정 전후 수치·기간·주체·재원과 행 수를 유지하며, 기존 중복 판단은 정정 전 문구를 사용합니다. 거래 상세는 정정본 적용을 표시하고 OCR 신뢰도를 그대로 유지합니다.
 
-SDK는 기존 ChatGPT 로그인만 사용하고 키 인증이면 중단합니다. 변경 없는 입력은 재호출하지 않으며 묶음·행·입력 길이·시간을 제한합니다. `ROBIN_HOOD_OCR_CORRECTION_ENABLED`로 새 호출을 켜고, 꺼진 상태에서도 저장된 동일 설정의 정정본은 재사용합니다. 아직 실제 모델 실행이나 상시 AI 처리를 활성화하지 않았습니다. SDK 구성·로그인·운영 DB 연결은 배포 설정을 따릅니다.
+SDK는 기존 ChatGPT 로그인만 사용하고 키 인증이면 중단합니다. 변경 없는 입력은 재호출하지 않으며 묶음·행·입력 길이·시간을 제한합니다. `ROBINHOOD_OCR_CORRECTION_ENABLED`로 새 호출을 켜고, 꺼진 상태에서도 저장된 동일 설정의 정정본은 재사용합니다. 아직 실제 모델 실행이나 상시 AI 처리를 활성화하지 않았습니다. SDK 구성·로그인·운영 DB 연결은 배포 설정을 따릅니다.
 
 ## 계층
 

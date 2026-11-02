@@ -33,7 +33,7 @@ SLEEP = 1.0  # 0.5초 간격에서 503(Service Temporarily Unavailable)을 받�
 session = requests.Session()
 session.headers.update({
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/126.0 Safari/537.36 robin-hood-collector",
+                  "(KHTML, like Gecko) Chrome/126.0 Safari/537.36 robinhood-collector",
     "Referer": BASE + "/board/BoardList.do?boardTypeId=158&menuId=001007013001",
 })
 

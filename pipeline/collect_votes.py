@@ -56,7 +56,7 @@ def main():
         print(f"표결 수집 건너뜀: {e}", file=sys.stderr)
         return
     s = requests.Session()
-    s.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robin-hood-collector"
+    s.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robinhood-collector"
     errors_in_row = 0
     for age in (22, 21):
         folder = OUT / str(age)

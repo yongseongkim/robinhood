@@ -4,8 +4,8 @@
 
 ## 전체 시스템
 
-- `robin-hood-web/`: React·TypeScript 웹 대시보드.
-- `robin-hood-server/`: FastAPI 기반 조회 API와 주기적인 데이터 수집 작업.
+- `robinhood-web/`: React·TypeScript 웹 대시보드.
+- `robinhood-server/`: FastAPI 기반 조회 API와 주기적인 데이터 수집 작업.
 - `pipeline/`: 공개자료 수집, 문서·표 추출, 정규화와 분석.
 - PostgreSQL: 서비스 조회 데이터와 수집 작업 이력 저장. 로컬 개발에서는 SQLite도 지원합니다.
 - `site/`: 기존 정적 사이트.

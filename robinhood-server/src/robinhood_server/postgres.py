@@ -32,7 +32,7 @@ DELETE_ORDER = (
     "documents",
     "metadata",
 )
-_lease = ContextVar("robin_hood_job_lease", default=None)
+_lease = ContextVar("robinhood_job_lease", default=None)
 
 
 class JobAlreadyRunning(RuntimeError):
@@ -41,7 +41,7 @@ class JobAlreadyRunning(RuntimeError):
 
 def lock_key(schema):
     return int.from_bytes(
-        hashlib.sha256(("robin-hood:collection:" + schema).encode()).digest()[:8],
+        hashlib.sha256(("robinhood:collection:" + schema).encode()).digest()[:8],
         "big",
         signed=True,
     )
@@ -57,7 +57,7 @@ def session(config, *, writer=False, autocommit=False):
     with psycopg.connect(
         url,
         connect_timeout=10,
-        application_name="robin-hood-job" if writer else "robin-hood-api",
+        application_name="robinhood-job" if writer else "robinhood-api",
         autocommit=autocommit,
         row_factory=dict_row,
     ) as conn:

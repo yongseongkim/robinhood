@@ -4,9 +4,9 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from robin_hood_server.app import create_app
-from robin_hood_server.config import Settings
-from robin_hood_server.index import build_index
+from robinhood_server.app import create_app
+from robinhood_server.config import Settings
+from robinhood_server.index import build_index
 
 
 @pytest.fixture

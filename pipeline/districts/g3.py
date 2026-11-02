@@ -29,7 +29,7 @@ STAGING = ROOT / "data" / "staging"
 KST = timezone(timedelta(hours=9))
 SCOPE_START = "2022-07-01"
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
-      "Chrome/126 Safari/537.36 robin-hood-collector")
+      "Chrome/126 Safari/537.36 robinhood-collector")
 
 COUNCILS = {
     "yangcheon": {

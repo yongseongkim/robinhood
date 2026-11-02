@@ -12,33 +12,33 @@ class Settings:
     database: Path = field(
         default_factory=lambda: Path(
             os.getenv(
-                "ROBIN_HOOD_DATABASE", ROOT / "robin-hood-server/var/dashboard.sqlite3"
+                "ROBINHOOD_DATABASE", ROOT / "robinhood-server/var/dashboard.sqlite3"
             )
         )
     )
     database_url: str = field(
-        default_factory=lambda: os.getenv("ROBIN_HOOD_DATABASE_URL")
+        default_factory=lambda: os.getenv("ROBINHOOD_DATABASE_URL")
         or os.getenv("DATABASE_URL", ""),
         repr=False,
     )
     job_database_url: str = field(
-        default_factory=lambda: os.getenv("ROBIN_HOOD_JOB_DATABASE_URL", ""), repr=False
+        default_factory=lambda: os.getenv("ROBINHOOD_JOB_DATABASE_URL", ""), repr=False
     )
     database_schema: str = field(
-        default_factory=lambda: os.getenv("ROBIN_HOOD_DATABASE_SCHEMA", "robin_hood")
+        default_factory=lambda: os.getenv("ROBINHOOD_DATABASE_SCHEMA", "robinhood")
     )
     data: Path = field(
         default_factory=lambda: Path(
-            os.getenv("ROBIN_HOOD_DATA", ROOT / "data/normalized")
+            os.getenv("ROBINHOOD_DATA", ROOT / "data/normalized")
         )
     )
     var: Path = field(
         default_factory=lambda: Path(
-            os.getenv("ROBIN_HOOD_VAR", ROOT / "robin-hood-server/var")
+            os.getenv("ROBINHOOD_VAR", ROOT / "robinhood-server/var")
         )
     )
     pseudonyms: bool = field(
-        default_factory=lambda: os.getenv("ROBIN_HOOD_PSEUDONYMS", "true").lower()
+        default_factory=lambda: os.getenv("ROBINHOOD_PSEUDONYMS", "true").lower()
         == "true"
     )
     naver_client_id: str = field(
@@ -46,37 +46,37 @@ class Settings:
     )
     web_dist: Path = field(
         default_factory=lambda: Path(
-            os.getenv("ROBIN_HOOD_WEB_DIST", ROOT / "robin-hood-web/dist")
+            os.getenv("ROBINHOOD_WEB_DIST", ROOT / "robinhood-web/dist")
         )
     )
     collector_python: str = field(
         default_factory=lambda: os.getenv(
-            "ROBIN_HOOD_COLLECTOR_PYTHON", str(ROOT / ".venv/bin/python")
+            "ROBINHOOD_COLLECTOR_PYTHON", str(ROOT / ".venv/bin/python")
         )
     )
     ocr_correction_enabled: bool = field(
         default_factory=lambda: os.getenv(
-            "ROBIN_HOOD_OCR_CORRECTION_ENABLED", "false"
+            "ROBINHOOD_OCR_CORRECTION_ENABLED", "false"
         ).lower()
         == "true"
     )
     ocr_model: str = field(
-        default_factory=lambda: os.getenv("ROBIN_HOOD_OCR_MODEL", "")
+        default_factory=lambda: os.getenv("ROBINHOOD_OCR_MODEL", "")
     )
     ocr_effort: str = field(
-        default_factory=lambda: os.getenv("ROBIN_HOOD_OCR_EFFORT", "")
+        default_factory=lambda: os.getenv("ROBINHOOD_OCR_EFFORT", "")
     )
     ocr_codex_home: str = field(
-        default_factory=lambda: os.getenv("ROBIN_HOOD_OCR_CODEX_HOME", "")
+        default_factory=lambda: os.getenv("ROBINHOOD_OCR_CODEX_HOME", "")
     )
     ocr_max_batches: int = field(
-        default_factory=lambda: int(os.getenv("ROBIN_HOOD_OCR_MAX_BATCHES", "5"))
+        default_factory=lambda: int(os.getenv("ROBINHOOD_OCR_MAX_BATCHES", "5"))
     )
     ocr_batch_rows: int = field(
-        default_factory=lambda: int(os.getenv("ROBIN_HOOD_OCR_BATCH_ROWS", "40"))
+        default_factory=lambda: int(os.getenv("ROBINHOOD_OCR_BATCH_ROWS", "40"))
     )
     ocr_timeout: int = field(
-        default_factory=lambda: int(os.getenv("ROBIN_HOOD_OCR_TIMEOUT_SECONDS", "120"))
+        default_factory=lambda: int(os.getenv("ROBINHOOD_OCR_TIMEOUT_SECONDS", "120"))
     )
 
     def __post_init__(self):

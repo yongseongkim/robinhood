@@ -11,13 +11,13 @@ from psycopg import sql
 import pytest
 from fastapi.testclient import TestClient
 
-from robin_hood_server.app import create_app
-from robin_hood_server.config import Settings
-from robin_hood_server.db import connect
-from robin_hood_server.index import build_index
-from robin_hood_server.jobs import run_due
-from robin_hood_server.job_store import get_schedule, history
-from robin_hood_server.postgres import (
+from robinhood_server.app import create_app
+from robinhood_server.config import Settings
+from robinhood_server.db import connect
+from robinhood_server.index import build_index
+from robinhood_server.jobs import run_due
+from robinhood_server.job_store import get_schedule, history
+from robinhood_server.postgres import (
     JobAlreadyRunning,
     Row,
     collection_lock,
@@ -47,7 +47,7 @@ def test_postgres_failure_does_not_fall_back_to_local_data(config, monkeypatch):
         raise psycopg.OperationalError("unavailable database with private details")
         yield
 
-    monkeypatch.setattr("robin_hood_server.db.session", unavailable)
+    monkeypatch.setattr("robinhood_server.db.session", unavailable)
     cfg = replace(
         config, database_url="postgresql://private-user:private-password@invalid/db"
     )

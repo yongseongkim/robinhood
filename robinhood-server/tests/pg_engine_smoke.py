@@ -8,12 +8,12 @@ from datetime import datetime
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "robin-hood-server/src"))
-sys.path.insert(0, str(ROOT / "robin-hood-server/tests"))
+sys.path.insert(0, str(ROOT / "robinhood-server/src"))
+sys.path.insert(0, str(ROOT / "robinhood-server/tests"))
 from conftest import config as config_fixture
 from fastapi.testclient import TestClient
-from robin_hood_server.app import create_app
-from robin_hood_server.postgres import Row, qmarks, TABLES
+from robinhood_server.app import create_app
+from robinhood_server.postgres import Row, qmarks, TABLES
 
 
 class Rows:
@@ -32,7 +32,7 @@ class Engine:
 
     def __init__(self):
         self.process = subprocess.Popen(
-            ["node", str(ROOT / "robin-hood-server/tests/pg_engine_bridge.mjs")],
+            ["node", str(ROOT / "robinhood-server/tests/pg_engine_bridge.mjs")],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             text=True,
@@ -78,11 +78,11 @@ with tempfile.TemporaryDirectory() as d:
     schema = "\n".join(
         p.read_text()
         for p in sorted(
-            (ROOT / "robin-hood-server/src/robin_hood_server/migrations").glob("*.sql")
+            (ROOT / "robinhood-server/src/robinhood_server/migrations").glob("*.sql")
         )
     )
     engine.request(
-        "CREATE SCHEMA robin_hood;SET search_path TO robin_hood,pg_catalog;" + schema,
+        "CREATE SCHEMA robinhood;SET search_path TO robinhood,pg_catalog;" + schema,
         op="exec",
     )
     with sqlite3.connect(cfg.database) as staging:
@@ -102,7 +102,7 @@ with tempfile.TemporaryDirectory() as d:
         yield engine
 
     pgcfg = replace(cfg, database_url="postgresql://test.invalid/never-connected")
-    with patch("robin_hood_server.app.connect", connection):
+    with patch("robinhood_server.app.connect", connection):
         api = TestClient(create_app(pgcfg))
         paths = [
             "/api/health",
@@ -139,7 +139,7 @@ with tempfile.TemporaryDirectory() as d:
         print(
             "PostgreSQL 17.5 WASM engine: 18 API paths and funding/refund/aggregate contracts passed"
         )
-    from robin_hood_server.job_store import write_status, history, get_schedule
+    from robinhood_server.job_store import write_status, history, get_schedule
 
     class Raw:
         def execute(self, query, args=()):
@@ -157,7 +157,7 @@ with tempfile.TemporaryDirectory() as d:
             engine.request("ROLLBACK", op="exec")
             raise
 
-    with patch("robin_hood_server.job_store.session", raw_session):
+    with patch("robinhood_server.job_store.session", raw_session):
         record = {
             "id": "run-1",
             "state": "succeeded",
@@ -177,7 +177,7 @@ with tempfile.TemporaryDirectory() as d:
         assert len(history(pgcfg)) == 1 and history(pgcfg)[0]["state"] == "failed"
         assert get_schedule(pgcfg)["failures"] == 2
     print("PostgreSQL shared job status, history upsert and durable schedule passed")
-    from robin_hood_server.correction_store import CorrectionStore
+    from robinhood_server.correction_store import CorrectionStore
 
     correction = {
         "id": "correction-1",
@@ -192,7 +192,7 @@ with tempfile.TemporaryDirectory() as d:
         "pending": [],
         "issues": [],
     }
-    with patch("robin_hood_server.correction_store.session", raw_session):
+    with patch("robinhood_server.correction_store.session", raw_session):
         store = CorrectionStore(pgcfg)
         store.save(correction)
         assert store.get(correction["id"])["state"] == "complete"

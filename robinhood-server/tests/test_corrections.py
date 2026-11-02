@@ -10,9 +10,9 @@ from concurrent.futures import TimeoutError as FutureTimeout
 
 import pytest
 
-from robin_hood_server.codex_correction import correct_text
-from robin_hood_server.correction_store import CorrectionStore
-from robin_hood_server.ocr_correction import candidates, helpers, run_corrections
+from robinhood_server.codex_correction import correct_text
+from robinhood_server.correction_store import CorrectionStore
+from robinhood_server.ocr_correction import candidates, helpers, run_corrections
 
 
 @pytest.fixture
@@ -320,7 +320,7 @@ def test_sdk_timeout_interrupts_the_turn(config, monkeypatch):
     pool = MagicMock()
     pool.submit.return_value.result.side_effect = FutureTimeout()
     monkeypatch.setattr(
-        "robin_hood_server.codex_correction.ThreadPoolExecutor", lambda **kw: pool
+        "robinhood_server.codex_correction.ThreadPoolExecutor", lambda **kw: pool
     )
     with pytest.raises(TimeoutError):
         correct_text(config, {"rows": []})

@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'robin-hood-server/src'))
+sys.path.insert(0, str(ROOT / 'robinhood-server/src'))
 
 
 def main():
@@ -16,17 +16,17 @@ def main():
     parser.add_argument('--url', help='Test an existing server instead of the in-process API')
     parser.add_argument('--channel', default=None, help='For example: chrome')
     args = parser.parse_args()
-    base = (args.url or 'http://robin-hood.test').rstrip('/')
+    base = (args.url or 'http://robinhood.test').rstrip('/')
     output = ROOT / '.artifacts/implementation/screenshots'
     output.mkdir(parents=True, exist_ok=True)
     errors, requests_failed = [], []
     api = None
     if not args.url:
         from fastapi.testclient import TestClient
-        from robin_hood_server.app import create_app
+        from robinhood_server.app import create_app
         api = TestClient(create_app())
-        assert (ROOT / 'robin-hood-web/dist/index.html').is_file(), 'Run npm run build first.'
-        assert api.get('/api/health').status_code == 200, 'Run robin-hood index first.'
+        assert (ROOT / 'robinhood-web/dist/index.html').is_file(), 'Run npm run build first.'
+        assert api.get('/api/health').status_code == 200, 'Run robinhood index first.'
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True, channel=args.channel)
@@ -36,7 +36,7 @@ def main():
         if api:
             def serve(route):
                 request = urlsplit(route.request.url)
-                if request.netloc != 'robin-hood.test':
+                if request.netloc != 'robinhood.test':
                     return route.abort()  # Fonts and third-party SDK aren't part of this test.
                 response = api.get(request.path + ('?' + request.query if request.query else ''))
                 if response.status_code >= 400:

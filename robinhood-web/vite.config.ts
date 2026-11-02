@@ -8,7 +8,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": {
-        target: process.env.ROBIN_HOOD_API_URL || "http://127.0.0.1:8000",
+        target: process.env.ROBINHOOD_API_URL || "http://127.0.0.1:8000",
       },
     },
   },
@@ -16,7 +16,7 @@ export default defineConfig({
     port: 4173,
     proxy: {
       "/api": {
-        target: process.env.ROBIN_HOOD_API_URL || "http://127.0.0.1:8000",
+        target: process.env.ROBINHOOD_API_URL || "http://127.0.0.1:8000",
       },
     },
   },
