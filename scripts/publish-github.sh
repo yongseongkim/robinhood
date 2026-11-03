@@ -45,7 +45,9 @@ if git show-ref --verify --quiet "refs/heads/$FEATURE_BRANCH"; then
 else
   git switch -c "$FEATURE_BRANCH"
 fi
-git add -- .gitignore README.md SPEC.md docs deploy pipeline tests scripts robinhood-server robinhood-web site/index.html site/assets
+python3 scripts/check_encrypted_credentials.py
+git add -- .gitignore AGENTS.md README.md SPEC.md credentials.yaml .sops.yaml docs deploy pipeline tests scripts robinhood-server robinhood-web site/index.html site/assets
+python3 scripts/check_encrypted_credentials.py --staged
 
 # Inspect the actual index, including any files staged before this script.
 # Report paths/pattern names only, never matching credential values.
@@ -67,7 +69,7 @@ for name in filter(None, names):
     parts = name.split('/')
     if (name.startswith(('data/', 'site/data/', '.artifacts/', '.playwright-mcp/'))
         or any(p in {'.venv', 'node_modules', 'dist', '__pycache__', '.pytest_cache', 'var'} for p in parts)
-        or parts[-1] in {'credentials.yaml', '.sops.yaml'}
+        or parts[-1] in {'credentials.yaml', '.sops.yaml'} and name not in {'credentials.yaml', '.sops.yaml'}
         or parts[-1].startswith('.env') and parts[-1] != '.env.example'
         or name.endswith(('.sqlite', '.sqlite3', '.db', '.pyc', '.tsbuildinfo'))):
         blocked.append((name, 'excluded data/runtime/credential file'))
@@ -82,7 +84,7 @@ if blocked:
     for name, label in blocked:
         print(f'Refusing to publish {name}: {label}', file=sys.stderr)
     sys.exit(1)
-print(f'Checked {len(list(filter(None, names)))} tracked files; raw datasets and credentials excluded.')
+print(f'Checked {len(list(filter(None, names)))} tracked files; raw datasets and plaintext credentials excluded.')
 PY
 
 if ! git diff --cached --quiet; then
@@ -123,7 +125,7 @@ Validation:
 
 Deployment requires a configured PostgreSQL URL. NAVER Maps and optional Codex corrections require their documented application/login settings. No production migration, persistent scheduler, or live Codex correction run has been activated.
 
-Raw/normalized datasets, generated site data, local databases, credentials, dependencies, build output, and development artifacts are excluded from Git. Dataset-based reconciliation tests require a restored or recollected dataset.
+Raw/normalized datasets, generated site data, local databases, plaintext credentials, dependencies, build output, and development artifacts are excluded from Git. SOPS-encrypted credentials.yaml and .sops.yaml are versioned. Dataset-based reconciliation tests require a restored or recollected dataset.
 BODY
 gh pr create --repo "$REPOSITORY" --base main --head "$FEATURE_BRANCH" \
   --title "feat: add public spending dashboard and scheduled ingestion" --body-file "$PR_BODY"

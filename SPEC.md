@@ -113,7 +113,7 @@ The MVP scope is National Assembly members plus Seoul local councils.
 - Label each finding with the actual format of its source document.
 
 **Security**
-- API keys live only in the SOPS/GCP-KMS-encrypted `credentials.yaml`. Never print, log or commit a key.
+- API keys are versioned only as SOPS/GCP-KMS ciphertext in `credentials.yaml`, alongside `.sops.yaml`. Never print, log or commit plaintext keys or runtime GCP authentication files.
 - Per the 열린국회 terms, the key must not be shared or published.
 
 **Licensing**
@@ -124,7 +124,7 @@ The MVP scope is National Assembly members plus Seoul local councils.
 - Newstapa data: copyrighted; don't use it without permission.
 
 **Process**
-- The user explicitly authorized repository creation and a pull request on 2026-11-01. Keep datasets, credentials, generated output and local runtime files out of version control.
+- The user explicitly authorized repository creation and a pull request on 2026-11-01, and tracking SOPS-encrypted credentials with its KMS configuration on 2026-11-04. Keep datasets, plaintext credentials, generated output and local runtime files out of version control. Initial deployments collect data into empty persistent storage; subsequent deployments preserve it.
 - The site has not been published. Deciding to publish is the user's call, because it shows real politicians next to flags.
 
 ## 4. Data collected (in the pipeline and on the site)

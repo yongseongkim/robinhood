@@ -20,6 +20,8 @@ uv run --env-file .env robinhood serve
 
 API는 `/api/docs`에 명세를 제공하고, 웹 빌드가 있으면 같은 서버가 `robinhood-web/dist`도 제공합니다. 설정 파일은 uv의 `--env-file` 옵션으로 읽으며 운영에서는 환경변수를 직접 주입할 수 있습니다.
 
+위 `index`는 정규화 자료가 이미 있을 때 사용하는 재적재 명령입니다. 빈 환경의 최초 배포에서는 `migrate` 후 `collect`로 원본 수집부터 조회 DB 반영까지 실행합니다. 지도 생성기도 없는 원본을 자동 다운로드합니다. SOPS 암호문과 KMS 설정은 저장소에 포함하며, 수집 환경에 SOPS와 KMS 복호화 권한을 준비합니다. 전체 순서는 [설치 안내](../docs/INSTALL.md)에 있습니다.
+
 ## 저장 구조와 발행
 
 - `subjects`, `merchants`, `documents`, `transactions`, `findings`: 실제 수집본의 주체·거래처·출처·거래·추가 확인 근거.

@@ -21,8 +21,6 @@ playwright-report/
 htmlcov/
 data/
 site/data/
-credentials.yaml
-.sops.yaml
 *.sqlite
 *.sqlite3
 *.sqlite3-*
