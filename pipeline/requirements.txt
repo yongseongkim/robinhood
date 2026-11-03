@@ -1,4 +1,6 @@
 # Collector/parser environment; separate from the API's small dependency set.
+# System OCR packages and platform support: docs/INSTALL.md#ocr-실행-환경
+# Tesseract CLI/language data are OS packages; the Linux OCR adapter is not implemented yet.
 requests>=2.32,<3
 openpyxl>=3.1,<4
 pandas>=2.2,<3

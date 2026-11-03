@@ -51,6 +51,8 @@ robinhood-server/.venv/bin/robinhood collect
 
 강북구 자료 수집에는 설치된 Chrome이 필요합니다. Linux에서는 macOS Vision OCR이 실행되지 않아 기존 OCR 결과가 있을 때만 유지할 수 있습니다. 새 스캔본까지 처음부터 처리하려면 macOS 수집 호스트를 사용하거나 별도 OCR 엔진을 추가해야 합니다.
 
+OCI/Linux의 Tesseract 시스템 패키지·한국어/영어 언어 데이터 설치와 현재 어댑터 구현 상태는 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 기록했습니다.
+
 ## Linux 상시 실행
 
 `systemd/robinhood-api.service`, `systemd/robinhood-worker.service`는 검토 가능한 서비스 구성입니다. 파일의 경로·계정·환경 파일을 배포 위치에 맞춘 후 활성화합니다.

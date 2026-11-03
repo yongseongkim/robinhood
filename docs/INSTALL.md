@@ -7,7 +7,7 @@
 - Python 3.12 이상과 uv.
 - Node.js 22.12 이상과 npm.
 - 운영 저장소로 사용할 기존 PostgreSQL. 로컬 확인에는 SQLite를 사용할 수 있습니다.
-- 스캔 문서 OCR을 새로 처리하려면 macOS Vision이 필요합니다. Linux에서는 기존 OCR 결과를 유지합니다.
+- 스캔 문서 OCR의 시스템 패키지와 현재 지원 범위는 [OCR 실행 환경](#ocr-실행-환경)을 확인합니다.
 - 강북구의회 자료 수집에는 설치된 Google Chrome이 필요합니다.
 - 저장소의 암호화된 API 키를 사용할 환경에는 SOPS CLI와 해당 GCP KMS 키의 복호화 권한이 필요합니다.
 
@@ -31,6 +31,30 @@ cp robinhood-server/.env.example robinhood-server/.env
 ```
 
 `DATABASE_URL`을 비워 두면 로컬 SQLite를 사용합니다. PostgreSQL을 쓰면 기존 메인 DB의 연결 URL을 설정하고 `ROBINHOOD_DATABASE_SCHEMA=robinhood` 전용 스키마를 사용합니다. API 조회 역할과 적재 역할을 분리할 때는 `ROBINHOOD_JOB_DATABASE_URL`도 설정합니다. 권한 구성은 [운영 배포 안내](../deploy/README.md)에 있습니다.
+
+## OCR 실행 환경
+
+Python 패키지는 `pipeline/requirements.txt`로 설치하고, OCR 엔진 같은 시스템 의존성은 OS 패키지 관리자로 별도 설치합니다. Tesseract 본체와 언어 데이터는 `pip install -r pipeline/requirements.txt`로 설치되지 않습니다.
+
+| 실행 환경 | OCR 엔진과 시스템 의존성 | 현재 연동 상태 |
+|---|---|---|
+| macOS | Apple Vision. Python 바인딩 `pyobjc-framework-Vision`, `pyobjc-framework-Quartz`는 requirements의 macOS 조건으로 설치 | 파이프라인에 연결됨 |
+| OCI/Linux | Tesseract CLI와 한국어 `kor`·영어 `eng` 언어 데이터 | 어댑터 구현 전. 설치만으로 현재 파이프라인의 Linux OCR이 활성화되지는 않음 |
+
+현재 `pipeline/ocr.py`는 Apple Vision을 직접 호출합니다. Linux에서 새 스캔 PDF를 처리하려면 Tesseract 출력을 기존 문자·좌표·신뢰도 형식에 맞추는 어댑터와 실제 표의 금액·행 검증이 추가로 필요합니다. 아래 명령은 그 연동을 위한 실행 환경 준비입니다.
+
+OCI의 Ubuntu/Debian 인스턴스에서는 다음 시스템 패키지를 설치합니다. Oracle Linux 등 다른 배포판에서는 해당 OS에 맞는 패키지 관리자를 사용합니다.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y tesseract-ocr tesseract-ocr-kor tesseract-ocr-eng
+tesseract --version
+tesseract --list-langs
+```
+
+언어 목록에 `kor`와 `eng`가 있어야 합니다. worker를 컨테이너로 실행하면 Tesseract와 언어 데이터도 worker 이미지 안에 설치합니다. 설치 확인과 실제 파이프라인 OCR 검증은 별도로 수행합니다.
+
+설치 기준: [Tesseract 공식 설치 안내](https://tesseract-ocr.github.io/tessdoc/Installation.html), [Ubuntu 한국어 언어 데이터 패키지](https://packages.ubuntu.com/noble/tesseract-ocr-kor), [Tesseract CLI 안내](https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html).
 
 ## API 인증키
 
