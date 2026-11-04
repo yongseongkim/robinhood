@@ -2,6 +2,10 @@
 
 서비스 목적과 구성은 [루트 README](../README.md), 자료의 출처·수집 범위는 [데이터 출처 문서](DATA_SOURCES.md)를 참고하세요. 아래 개발 예시는 API에 8010, 웹 개발 서버에 5173 포트를 사용합니다.
 
+이 문서의 설치·최초 적재·로컬 실행 절차를 공통 안내로 사용합니다. 운영 권한과 서비스 활성화는 [배포 안내](../deploy/README.md), 서버의 저장·갱신 정책은 [서버 안내](../robinhood-server/README.md)에 있습니다.
+
+현재 Linux에서 API·일반 자료 수집은 실행할 수 있지만, 새 스캔 PDF의 OCR은 macOS Vision 구현에 의존합니다. 아래 Tesseract 설치 절차는 Linux 연동을 위한 준비이며, OCI에서 모든 스캔 자료까지 처리하는 수집 환경은 아직 완성되지 않았습니다.
+
 ## 필요한 환경
 
 - Python 3.12 이상과 uv.
@@ -73,14 +77,16 @@ OPENFISCAL_API_KEY=YOUR_OPENFISCAL_KEY
 
 환경변수가 우선이며 SOPS는 메모리에서 복호화합니다. 배포 DB URL이나 평문 API 키가 담긴 `.env`도 Git에서 제외합니다.
 
-기존 SOPS 구성이 준비된 환경에서는 저장소 루트에서 다음 명령으로 편집·읽기 여부를 확인합니다. 확인 명령은 키 값 자체를 출력하지 않습니다.
+SOPS와 KMS 인증이 준비된 환경에서는 저장소 루트에서 암호문 상태와 키 읽기 권한을 확인합니다. 확인 명령은 키 값 자체를 출력하지 않습니다.
 
 ```bash
-sops credentials.yaml
 python3 scripts/check_encrypted_credentials.py
+sops filestatus credentials.yaml
 .venv/bin/python pipeline/credentials.py
 .venv/bin/python pipeline/credentials.py openfiscal_api_key
 ```
+
+키를 변경할 때는 별도로 `sops credentials.yaml`을 사용합니다. 최초 실행을 위해 암호문을 편집할 필요는 없습니다.
 
 ## 데이터 준비와 최초 적재
 
@@ -88,7 +94,7 @@ python3 scripts/check_encrypted_credentials.py
 
 지도 생성기는 `data/raw/geo/`에 없는 지도 원본·출처 문서를 처음 실행할 때 내려받습니다. 다운로드와 JSON 검증이 완료된 파일만 보관하고, 이미 받은 파일은 재사용합니다. `--no-fetch` 재처리에서는 지도도 내려받지 않습니다. 출처와 라이선스는 [지도 원본 파일](DATA_SOURCES.md#지도-원본-파일)에 기록했습니다.
 
-이후 서버 명령은 `robinhood-server/` 디렉터리에서 실행합니다.
+로컬 설치에서는 이후 서버 명령을 `robinhood-server/` 디렉터리에서 실행합니다. 운영 환경 파일을 사용하는 경우에는 [배포 안내](../deploy/README.md)의 명령을 따릅니다.
 
 ```bash
 cd robinhood-server

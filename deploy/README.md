@@ -1,6 +1,8 @@
 # PostgreSQL 운영과 주기 수집 배포
 
-기존 메인 DB 안의 `robinhood` 전용 스키마를 사용합니다. 새 PostgreSQL 서버는 만들지 않습니다. 현재 작업에는 운영 DB URL과 배포 대상 접속 정보가 없으므로 실제 적재·서비스 활성화는 아직 수행하지 않았습니다.
+기존 메인 DB 안의 `robinhood` 전용 스키마를 사용합니다. 이 문서는 운영 계정·환경 파일·권한·서비스 활성화를 설명합니다. 공통 의존성과 로컬 실행은 [설치 안내](../docs/INSTALL.md)를 따릅니다. 저장소의 서비스 파일은 배포 템플릿이며 실제 활성화는 운영 환경에서 수행합니다.
+
+현재 OCI/Linux에서 새 스캔 PDF를 OCR로 처리하는 어댑터는 미구현입니다. API와 일반 자료 수집을 배포하는 단계와 스캔 자료까지 포함한 전체 수집 준비를 구분합니다. 지원 상태는 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 있습니다.
 
 ## 환경과 권한
 
@@ -41,10 +43,15 @@ uv venv .venv --python 3.12
 uv pip install --python .venv/bin/python -r pipeline/requirements.txt
 npm ci --prefix robinhood-web
 npm run build --prefix robinhood-web
-.venv/bin/python pipeline/credentials.py
-.venv/bin/python pipeline/credentials.py openfiscal_api_key
-robinhood-server/.venv/bin/robinhood migrate
-robinhood-server/.venv/bin/robinhood collect
+uv run --project robinhood-server --env-file /etc/robinhood/worker.env python pipeline/credentials.py
+uv run --project robinhood-server --env-file /etc/robinhood/worker.env python pipeline/credentials.py openfiscal_api_key
+```
+
+두 키 읽기 확인이 성공한 뒤 같은 worker 환경 파일로 최초 적재를 실행합니다.
+
+```bash
+uv run --project robinhood-server --env-file /etc/robinhood/worker.env robinhood migrate
+uv run --project robinhood-server --env-file /etc/robinhood/worker.env robinhood collect
 ```
 
 `collect`가 기관별 자료와 없는 지도 원본을 가져와 파싱·정규화·검증 후 DB에 반영합니다. 최초 발행 전까지 API 준비 상태는 503입니다. 이후 코드 재배포에서는 DB와 데이터 볼륨을 유지하며 worker가 주기 갱신합니다.
@@ -56,6 +63,8 @@ OCI/Linux의 Tesseract 시스템 패키지·한국어/영어 언어 데이터 �
 ## Linux 상시 실행
 
 `systemd/robinhood-api.service`, `systemd/robinhood-worker.service`는 검토 가능한 서비스 구성입니다. 파일의 경로·계정·환경 파일을 배포 위치에 맞춘 후 활성화합니다.
+
+제공된 API unit의 포트는 8000입니다. 설치 안내의 8010 개발 예시나 운영 프록시에 맞추려면 unit의 `ExecStart`에서 `--port`를 조정합니다.
 
 ```bash
 sudo cp deploy/systemd/robinhood-api.service deploy/systemd/robinhood-worker.service /etc/systemd/system/

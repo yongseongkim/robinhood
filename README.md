@@ -50,7 +50,7 @@ React 웹은 사용자가 고른 지역·기간·정당 등에 맞춰 `/api/v1/`
 
 `site/`는 가공 자료를 정적 파일로 제공하는 기존 방식입니다. 새 웹은 API로 조회하며, 서버 worker는 기존 정적 사이트 생성을 건너뜁니다. 원본·가공 데이터와 DB는 최초 배포 후 수집·가공으로 채우고 이후에는 보존하며 주기 갱신합니다. 데이터·로컬 DB·캐시는 Git에서 제외합니다. SOPS 암호문인 `credentials.yaml`과 KMS 설정인 `.sops.yaml`은 버전 관리하고, 평문 키와 실행 환경의 인증 파일은 별도로 주입합니다.
 
-현재 OCR은 macOS Vision을 사용합니다. OCI/Linux용 Tesseract 본체·한국어/영어 언어 데이터 등 시스템 요구사항과 연동 상태는 [OCR 실행 환경](docs/INSTALL.md#ocr-실행-환경)에 정리했습니다.
+현재 OCR은 macOS Vision을 사용하며 OCI/Linux OCR 어댑터는 구현 전입니다. Tesseract 설치 준비와 현재 지원 범위는 [OCR 실행 환경](docs/INSTALL.md#ocr-실행-환경)에 정리했습니다.
 
 ## 데이터 출처
 
@@ -70,5 +70,6 @@ React 웹은 사용자가 고른 지역·기간·정당 등에 맞춰 `/api/v1/`
 - [설치·실행 안내](docs/INSTALL.md): 시스템·Python 의존성, OCR 실행 환경, 데이터 준비, 인증키, 로컬 실행과 검증.
 - [데이터 출처와 수집본 기록](docs/DATA_SOURCES.md): 출처, 수집본 통계와 해석 기준.
 - [시스템 설계](docs/ARCHITECTURE.md): 저장·발행·정정 계층과 데이터 모델.
+- [기획·요구사항 기록](SPEC.md): 제품 범위와 설계 결정. 현재 실행 방법과 지원 상태는 설치 안내와 소스코드를 기준으로 확인.
 - [서버 안내](robinhood-server/README.md) / [웹 안내](robinhood-web/README.md): 구성별 상세 설명.
 - [운영 배포 안내](deploy/README.md): PostgreSQL 권한과 상시 실행 구성.

@@ -1,19 +1,8 @@
 # robinhood-web
 
-나랏일보고서의 React·TypeScript·Vite 웹입니다. Pencil의 P01–P10을 페이지·탭·필터로 구현하고 모바일 장소 탐색을 같은 경로에 반응형으로 제공합니다.
+나랏일보고서의 React·TypeScript·Vite 웹입니다. 페이지·탭·필터와 모바일 장소 탐색을 같은 경로에 반응형으로 제공합니다.
 
-```bash
-cd robinhood-web
-npm ci
-npm run dev
-```
-
-Node.js 22.12+가 필요합니다. `http://localhost:5173`에서 열며 `/api`는 기본 `http://127.0.0.1:8000`으로 프록시합니다. 다른 API 주소는 `ROBINHOOD_API_URL` 환경변수로 Vite에 전달합니다. 서버 API를 먼저 실행하세요.
-
-```bash
-npm run build
-npm run format:check
-```
+설치·개발 서버·빌드 명령은 [공통 설치 안내](../docs/INSTALL.md#로컬-웹과-api)를 따릅니다. 공통 예시는 웹 5173과 API 8010 포트를 사용하고 `ROBINHOOD_API_URL`로 프록시 대상을 지정합니다. 이 문서는 웹의 경로, 지도와 브라우저 검사를 설명합니다.
 
 빌드 후 `robinhood-server`를 실행하면 `dist/`와 API를 같은 출처에서 제공합니다. 운영에서는 HTTPS 역방향 프록시를 앞에 둘 수 있습니다. 외부 호스팅에서 웹만 따로 배포하려면 `/api` 프록시와 SPA 경로의 `index.html` fallback을 함께 설정해야 합니다.
 
@@ -34,4 +23,4 @@ uv run --project robinhood-server --with playwright python -m playwright install
 npm run test:e2e
 ```
 
-기본 E2E는 TCP 서버 없이 실제 FastAPI TestClient와 빌드된 웹을 Playwright 요청 라우팅으로 연결합니다. 먼저 웹 빌드와 `robinhood index`가 필요합니다. 실행 중인 웹을 검사하려면 `npm run test:e2e -- --url http://localhost:8000`을 사용합니다. `--channel chrome`으로 설치된 Chrome을 쓸 수 있습니다. 캡처는 루트 `.artifacts/implementation/screenshots/`에 저장됩니다.
+기본 E2E는 TCP 서버 없이 실제 FastAPI TestClient와 빌드된 웹을 Playwright 요청 라우팅으로 연결합니다. 먼저 웹 빌드와 실제 조회 데이터 적재가 필요합니다. 최초 적재는 `collect`, 기존 정규화 자료의 재적재는 `index`를 사용합니다. 실행 중인 웹을 검사하려면 `npm run test:e2e -- --url http://127.0.0.1:8010`을 사용합니다. `--channel chrome`으로 설치된 Chrome을 쓸 수 있습니다. 캡처는 루트 `.artifacts/implementation/screenshots/`에 저장됩니다.
