@@ -1,0 +1,7 @@
+# SOPS 암호화 규칙: 프로젝트 루트의 credentials.yaml은 GCP KMS 키로 암호화한다.
+# 복호화에는 이 키에 대한 cloudkms.cryptoKeyVersions.useToDecrypt 권한과 gcloud ADC 로그인이 필요하다
+# (gcloud auth application-default login). 암호문과 이 설정은 Git에 포함한다.
+# 평문 키와 ADC/서비스 계정 인증 파일은 배포 환경에서 별도로 관리한다.
+creation_rules:
+  - path_regex: (^|/)credentials\.ya?ml$
+    gcp_kms: projects/default-487602/locations/asia-northeast3/keyRings/homelab-secrets/cryptoKeys/sops-key

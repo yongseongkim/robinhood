@@ -15,10 +15,13 @@
   seoul        서울 25개 구 (별도 확대 viewBox)
   districts    제22대 지역구 / seoulDistricts: 서울 지역구(확대 viewBox) / districts21: 제21대 지역구
 """
+import argparse
 import hashlib
 import json
+import os
 import re
 import sys
+import tempfile
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -28,6 +31,7 @@ from pyproj import Transformer
 from shapely import STRtree
 from shapely.geometry import MultiPolygon, Polygon, mapping, shape
 import numpy as np
+import requests
 import shapely
 from shapely.ops import unary_union
 
@@ -84,6 +88,49 @@ _to4326 = Transformer.from_crs("EPSG:5179", "EPSG:4326", always_xy=True)
 def to5179(coords):
     x, y = _tr.transform(coords[:, 0], coords[:, 1])
     return np.column_stack([x, y])
+
+
+def download_url(url):
+    """GitHub blob pages in provenance metadata need raw content for downloads."""
+    prefix = "https://github.com/"
+    if url.startswith(prefix):
+        return "https://raw.githubusercontent.com/" + url[len(prefix):].replace("/blob/", "/", 1)
+    return url
+
+
+def fetch_missing_sources():
+    """Bootstrap map inputs on an empty deployment; retain existing originals."""
+    RAW.mkdir(parents=True, exist_ok=True)
+    downloaded = 0
+    for source in SOURCES:
+        target = RAW / source["file"]
+        if target.is_file() and target.stat().st_size:
+            continue
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=RAW, prefix=".geo-", suffix=".part", delete=False) as output:
+                temporary = Path(output.name)
+                with requests.get(download_url(source["url"]), stream=True, timeout=120) as response:
+                    response.raise_for_status()
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        output.write(chunk)
+            if not temporary.stat().st_size:
+                raise ValueError(f"Empty map source: {source['file']}")
+            if target.suffix in {".json", ".geojson"}:
+                data = json.loads(temporary.read_text())
+                if (
+                    not isinstance(data, dict)
+                    or data.get("type") != "FeatureCollection"
+                    or not isinstance(data.get("features"), list)
+                    or not data["features"]
+                ):
+                    raise ValueError(f"Invalid map source: {source['file']}")
+            os.replace(temporary, target)
+            downloaded += 1
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+    return downloaded
 
 
 def sha256(p):
@@ -238,7 +285,9 @@ def legislator_districts():
     return by["제22대"], by["제21대"]
 
 
-def main():
+def main(*, fetch_missing=True):
+    if fetch_missing:
+        fetch_missing_sources()
     write_manifest()
 
     # ---- 시·군·구: 행정동 → 시·군·구 dissolve
@@ -359,4 +408,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Build map data from public source files.")
+    parser.add_argument("--no-fetch", action="store_true", help="Use existing originals without downloading")
+    arguments = parser.parse_args()
+    main(fetch_missing=not arguments.no_fetch)

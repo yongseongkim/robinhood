@@ -1,6 +1,8 @@
 # PostgreSQL 운영과 주기 수집 배포
 
-기존 메인 DB 안의 `robinhood` 전용 스키마를 사용합니다. 새 PostgreSQL 서버는 만들지 않습니다. 현재 작업에는 운영 DB URL과 배포 대상 접속 정보가 없으므로 실제 적재·서비스 활성화는 아직 수행하지 않았습니다.
+기존 메인 DB 안의 `robinhood` 전용 스키마를 사용합니다. 이 문서는 운영 계정·환경 파일·권한·서비스 활성화를 설명합니다. 공통 의존성과 로컬 실행은 [설치 안내](../docs/INSTALL.md)를 따릅니다. 저장소의 서비스 파일은 배포 템플릿이며 실제 활성화는 운영 환경에서 수행합니다.
+
+현재 OCI/Linux에서 새 스캔 PDF를 OCR로 처리하는 어댑터는 미구현입니다. API와 일반 자료 수집을 배포하는 단계와 스캔 자료까지 포함한 전체 수집 준비를 구분합니다. 지원 상태는 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 있습니다.
 
 ## 환경과 권한
 
@@ -14,7 +16,9 @@ ROBINHOOD_PSEUDONYMS=true
 NAVER_MAPS_CLIENT_ID=
 ```
 
-worker 환경 파일 `/etc/robinhood/worker.env`에는 같은 DB의 적재 역할 연결을 설정합니다. 직접 연결 URL이 필요하면 `ROBINHOOD_JOB_DATABASE_URL`로 지정합니다. `ROBINHOOD_COLLECTOR_PYTHON=/srv/robinhood/.venv/bin/python`, `ROBINHOOD_VAR=/var/lib/robinhood`도 설정합니다. 기존 SOPS/GCP KMS 자격증명 또는 `ASSEMBLY_API_KEY`, `OPENFISCAL_API_KEY`가 수집 프로세스에서 읽혀야 합니다. 실제 환경 파일은 서비스 계정만 읽도록 관리합니다.
+worker 환경 파일 `/etc/robinhood/worker.env`에는 같은 DB의 적재 역할 연결을 설정합니다. 직접 연결 URL이 필요하면 `ROBINHOOD_JOB_DATABASE_URL`로 지정합니다. `ROBINHOOD_COLLECTOR_PYTHON=/srv/robinhood/.venv/bin/python`, `ROBINHOOD_VAR=/var/lib/robinhood`도 설정합니다. 실제 환경 파일은 서비스 계정만 읽도록 관리합니다.
+
+저장소에는 SOPS 암호문 `credentials.yaml`과 KMS 설정 `.sops.yaml`을 함께 포함합니다. worker 실행 환경에 SOPS CLI와 해당 키의 `roles/cloudkms.cryptoKeyDecrypter` 권한을 가진 GCP 실행 주체를 준비합니다. 운영에서는 서비스 계정/Workload Identity의 ADC를 사용하며, 별도 ADC 파일이 필요하면 저장소 밖에서 주입합니다. systemd의 ProtectHome 설정을 고려해 서비스가 읽을 수 있는 경로를 사용합니다. 대체 API 키는 `ASSEMBLY_API_KEY`, `OPENFISCAL_API_KEY`로 주입할 수 있습니다.
 
 마이그레이션 역할은 해당 스키마의 생성/DDL 권한이 필요합니다. API는 해당 스키마의 USAGE와 테이블 SELECT만 있으면 됩니다. 역할을 미리 생성한 DB 관리자가 부여할 권한의 예시는 다음과 같습니다. 실제 역할명으로 바꿔 적용하세요.
 
@@ -30,7 +34,7 @@ worker 역할과 API 역할을 하나로 시작해도 API 자체의 읽기 트�
 
 ## 준비와 최초 발행
 
-프로젝트를 `/srv/robinhood`에 놓고 서비스 계정 `robinhood`가 `data/`, `site/data/`, `/var/lib/robinhood`를 읽고 쓸 수 있게 준비합니다. 기존 원본·정규화 데이터와 OCR 캐시도 해당 배포 경로에 복사하거나 영구 볼륨으로 연결합니다. 다음 명령은 서비스 계정과 worker 환경변수가 설정된 셸에서 실행합니다.
+프로젝트를 `/srv/robinhood`에 놓고 서비스 계정 `robinhood`가 `data/`, `site/data/`, `/var/lib/robinhood`를 읽고 쓸 수 있게 준비합니다. 최초 배포는 빈 데이터 볼륨과 DB에서 수집해 채웁니다. 다음 명령은 서비스 계정과 worker 환경변수가 설정된 셸에서 실행하며, SOPS CLI와 KMS 권한도 준비되어 있어야 합니다.
 
 ```bash
 cd /srv/robinhood
@@ -39,15 +43,28 @@ uv venv .venv --python 3.12
 uv pip install --python .venv/bin/python -r pipeline/requirements.txt
 npm ci --prefix robinhood-web
 npm run build --prefix robinhood-web
-robinhood-server/.venv/bin/robinhood migrate
-robinhood-server/.venv/bin/robinhood index
+uv run --project robinhood-server --env-file /etc/robinhood/worker.env python pipeline/credentials.py
+uv run --project robinhood-server --env-file /etc/robinhood/worker.env python pipeline/credentials.py openfiscal_api_key
 ```
 
-강북구 자료 수집에는 설치된 Chrome이 필요합니다. Linux에서는 macOS Vision OCR이 실행되지 않아 이전 OCR 결과를 유지합니다. 새로운 스캔본까지 처리하려면 macOS 수집 호스트를 사용하거나 별도 OCR 엔진을 추가해야 합니다.
+두 키 읽기 확인이 성공한 뒤 같은 worker 환경 파일로 최초 적재를 실행합니다.
+
+```bash
+uv run --project robinhood-server --env-file /etc/robinhood/worker.env robinhood migrate
+uv run --project robinhood-server --env-file /etc/robinhood/worker.env robinhood collect
+```
+
+`collect`가 기관별 자료와 없는 지도 원본을 가져와 파싱·정규화·검증 후 DB에 반영합니다. 최초 발행 전까지 API 준비 상태는 503입니다. 이후 코드 재배포에서는 DB와 데이터 볼륨을 유지하며 worker가 주기 갱신합니다.
+
+강북구 자료 수집에는 설치된 Chrome이 필요합니다. Linux에서는 macOS Vision OCR이 실행되지 않아 기존 OCR 결과가 있을 때만 유지할 수 있습니다. 새 스캔본까지 처음부터 처리하려면 macOS 수집 호스트를 사용하거나 별도 OCR 엔진을 추가해야 합니다.
+
+OCI/Linux의 Tesseract 시스템 패키지·한국어/영어 언어 데이터 설치와 현재 어댑터 구현 상태는 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 기록했습니다.
 
 ## Linux 상시 실행
 
 `systemd/robinhood-api.service`, `systemd/robinhood-worker.service`는 검토 가능한 서비스 구성입니다. 파일의 경로·계정·환경 파일을 배포 위치에 맞춘 후 활성화합니다.
+
+제공된 API unit의 포트는 8000입니다. 설치 안내의 8010 개발 예시나 운영 프록시에 맞추려면 unit의 `ExecStart`에서 `--port`를 조정합니다.
 
 ```bash
 sudo cp deploy/systemd/robinhood-api.service deploy/systemd/robinhood-worker.service /etc/systemd/system/

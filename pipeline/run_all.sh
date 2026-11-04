@@ -28,7 +28,12 @@ $PY pipeline/parse_ocr.py || echo "OCR 건너뜀: macOS Vision을 쓸 수 없음
 if [[ -n "${ROBINHOOD_OCR_CORRECTION_PYTHON:-}" ]]; then
   "$ROBINHOOD_OCR_CORRECTION_PYTHON" -m robinhood_server.ocr_correction
 fi
-$PY pipeline/build_geo.py        # 지도 경로·시군구 인접 정보 (detect의 관할 지역 판단에도 사용)
+# 지도 경로·시군구 인접 정보. 원본 재처리에서는 지도도 내려받지 않는다.
+if [[ "${1:-}" == "--no-fetch" ]]; then
+  $PY pipeline/build_geo.py --no-fetch
+else
+  $PY pipeline/build_geo.py
+fi
 $PY pipeline/normalize.py
 $PY pipeline/detect.py
 $PY pipeline/assembly.py           # 의정활동 ↔ 의원 연결
