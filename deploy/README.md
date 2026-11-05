@@ -7,7 +7,7 @@
 ## Homelab k3s 배포
 
 `Dockerfile`은 `api`, `worker` 두 target을 제공합니다. `api`가 React 빌드와 FastAPI를 8000 포트로 함께 제공하고, `worker`는 수집·발행을 실행합니다.
-`helm/`은 ClusterIP Service `robinhood-api:80`, API Deployment, 단일 worker Deployment, PreSync migration Job과 원본 저장 PVC를 만듭니다.
+`helm/`은 웹과 API를 함께 제공하는 ClusterIP Service `robinhood:80`, API Deployment, 단일 worker Deployment, PreSync migration Job과 원본 저장 PVC를 만듭니다.
 namespace·DB·role·Secret·Cloudflare 연결은 [homelab-infra 운영 문서](https://github.com/yongseongkim/homelab-infra/blob/main/k8s/robinhood/README.md)를 따릅니다.
 
 ```bash

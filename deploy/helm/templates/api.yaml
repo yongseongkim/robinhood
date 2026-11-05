@@ -74,7 +74,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: robinhood-api
+  name: robinhood
   labels: {{- include "robinhood.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
