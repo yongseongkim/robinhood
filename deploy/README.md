@@ -4,6 +4,37 @@
 
 현재 OCI/Linux에서 새 스캔 PDF를 OCR로 처리하는 어댑터는 미구현입니다. API와 일반 자료 수집을 배포하는 단계와 스캔 자료까지 포함한 전체 수집 준비를 구분합니다. 지원 상태는 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 있습니다.
 
+## Homelab k3s 배포
+
+`Dockerfile`은 `api`, `worker` 두 target을 제공합니다. `api`가 React 빌드와 FastAPI를 8000 포트로 함께 제공하고, `worker`는 수집·발행을 실행합니다.
+`helm/`은 ClusterIP Service `robinhood-api:80`, API Deployment, 단일 worker Deployment, PreSync migration Job과 원본 저장 PVC를 만듭니다.
+namespace·DB·role·Secret·Cloudflare 연결은 [homelab-infra 운영 문서](https://github.com/yongseongkim/homelab-infra/blob/main/k8s/robinhood/README.md)를 따릅니다.
+
+```bash
+docker build --platform linux/arm64 --target api -f deploy/Dockerfile -t robinhood-api:local .
+docker build --platform linux/arm64 --target worker -f deploy/Dockerfile -t robinhood-worker:local .
+helm lint deploy/helm
+helm template robinhood deploy/helm --namespace robinhood
+```
+
+GitHub Actions `Build ARM64 images`는 PR에서 빌드를 검증하고 `v*` 태그 또는 수동 실행에서 OCIR에 이미지를 게시합니다.
+`v0.1.0`은 `yny.ocir.io/axrudau2tcfl/robinhood-{api,worker}:0.1.0`을 만듭니다.
+수동 실행은 `sha-<short commit>` 태그를 만듭니다. 배포 values에는 두 이미지가 모두 게시된 동일한 태그를 지정합니다.
+CI에는 repository Secrets `OCI_REGISTRY_USERNAME`, `OCI_AUTH_TOKEN`을 설정하고, 클러스터에는 homelab-infra가 관리하는 `oci-registry-secret`을 준비합니다. 인증 원본은 homelab-infra의 SOPS 파일입니다.
+
+worker에는 `WORKER_DATABASE_URL`의 값을 `DATABASE_URL`로, API에는 조회 URL을 전달합니다.
+출처 키는 `ASSEMBLY_API_KEY`, `OPENFISCAL_API_KEY`로 주입하므로 컨테이너에는 GCP 인증이나 SOPS가 필요하지 않습니다.
+worker는 `/storage/data`, `/storage/site-data`, `/storage/var`를 영구 볼륨에 보존합니다.
+기존 서버 경로 계산을 위해 이미지의 소스 구조와 `PYTHONPATH`를 유지합니다.
+
+ARM64 worker는 시스템 Chromium을 사용합니다. 다른 환경도 `ROBINHOOD_BROWSER_EXECUTABLE`에 실행 파일 경로를 지정할 수 있고, 미지정 시 기존 Chrome channel을 사용합니다.
+이미지에 Tesseract와 한국어·영어 데이터를 설치하지만 Linux OCR 어댑터는 아직 없습니다.
+AI OCR 정정은 Helm 배포에서 꺼져 있습니다.
+
+API readiness는 `/api/health`를 사용해 최초 발행 전에는 실패합니다. startup·liveness는 DB와 무관한 `/api/openapi.json`을 사용합니다.
+worker 교체는 Recreate이며 SIGTERM 뒤 진행 중인 수집이 끝날 때까지 최대 130분을 기다립니다.
+아래 systemd 절은 Kubernetes 대신 호스트 서비스를 사용하는 대안입니다. 같은 수집을 양쪽에서 동시에 활성화하지 않습니다.
+
 ## 환경과 권한
 
 API 환경 파일 `/etc/robinhood/api.env` 예시:

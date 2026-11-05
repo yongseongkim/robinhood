@@ -1,0 +1,41 @@
+images:
+  api: yny.ocir.io/axrudau2tcfl/robinhood-api
+  worker: yny.ocir.io/axrudau2tcfl/robinhood-worker
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+database:
+  schema: robinhood
+secrets:
+  database: robinhood-infra-secrets
+  sources: robinhood-source-secrets
+api:
+  replicas: 1
+  # 빈 DB의 첫 수집은 오래 걸리므로 기본 10분보다 길게 기다린다.
+  progressDeadlineSeconds: 10800
+  pseudonyms: true
+  naverMapsClientId: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+worker:
+  enabled: true
+  intervalHours: 24
+  # SIGTERM 뒤 현재 수집을 끝내며, pipeline 자체 timeout은 2시간이다.
+  terminationGracePeriodSeconds: 7800
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+persistence:
+  storageClass: local-path
+  size: 5Gi
+  existingClaim: ""
+nodeSelector: {}

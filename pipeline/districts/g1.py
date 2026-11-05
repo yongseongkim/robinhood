@@ -12,6 +12,7 @@
 import hashlib
 import html
 import json
+import os
 import re
 import sys
 import time
@@ -73,7 +74,10 @@ class Fetcher:
         if not hasattr(self, "_pw"):
             from playwright.sync_api import sync_playwright
             self._pw = sync_playwright().start()
-            self._browser = self._pw.chromium.launch(channel="chrome", headless=True)
+            # ARM64 배포는 Chrome 대신 컨테이너에 설치된 Chromium을 쓴다.
+            executable = os.environ.get("ROBINHOOD_BROWSER_EXECUTABLE")
+            options = {"executable_path": executable} if executable else {"channel": "chrome"}
+            self._browser = self._pw.chromium.launch(**options, headless=True)
             self._page = self._browser.new_page(user_agent=UA)
             self._page.goto(list_url, wait_until="domcontentloaded")
         got = {}

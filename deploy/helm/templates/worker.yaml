@@ -1,0 +1,73 @@
+{{- if .Values.worker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: robinhood-worker
+  labels: {{- include "robinhood.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  progressDeadlineSeconds: {{ add .Values.worker.terminationGracePeriodSeconds 600 }}
+  revisionHistoryLimit: 3
+  # 같은 원본 볼륨에 두 worker가 쓰지 않도록 교체를 직렬화한다.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels: {{- include "robinhood.labels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.worker.terminationGracePeriodSeconds }}
+      securityContext: {{- include "robinhood.podSecurity" . | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: "{{ .Values.images.worker }}:{{ .Values.images.tag }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["sh", "-ec"]
+          args:
+            - >-
+              mkdir -p /storage/data /storage/site-data /storage/var;
+              exec robinhood worker --interval-hours {{ .Values.worker.intervalHours }}
+          env:
+            {{- include "robinhood.databaseEnv" . | nindent 12 }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.database }}
+                  key: WORKER_DATABASE_URL
+            - name: ROBINHOOD_OCR_CORRECTION_ENABLED
+              value: "false"
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.sources }}
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}
+          securityContext: {{- include "robinhood.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - name: storage
+              mountPath: /storage
+            - name: tmp
+              mountPath: /tmp
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default "robinhood-data" }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+{{- end }}

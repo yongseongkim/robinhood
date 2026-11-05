@@ -1,0 +1,17 @@
+.git
+.venv
+**/.venv
+**/__pycache__
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.artifacts
+.pytest_cache
+data
+site/data
+robinhood-server/var
+**/.env
+**/.env.*
+credentials.yaml
+**/*.sqlite*
+**/*.log
