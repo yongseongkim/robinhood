@@ -2,5 +2,5 @@ apiVersion: v2
 name: robinhood
 description: 나랏일보고서 API, web and collection worker
 type: application
-version: "0.2.0"
-appVersion: "0.2.0"
+version: "0.2.1"
+appVersion: "0.2.1"

@@ -1,7 +1,7 @@
 images:
   api: yny.ocir.io/axrudau2tcfl/robinhood-api
   worker: yny.ocir.io/axrudau2tcfl/robinhood-worker
-  tag: "0.2.0"
+  tag: "0.2.1"
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 database:
