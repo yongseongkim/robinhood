@@ -1,6 +1,6 @@
 [project]
 name = "robinhood-server"
-version = "0.1.0"
+version = "0.2.0"
 description = "나랏일보고서 read API and collection jobs"
 requires-python = ">=3.12"
 dependencies = ["fastapi==0.129.0", "uvicorn==0.40.0", "holidays==0.107", "psycopg[binary]==3.2.12"]

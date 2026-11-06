@@ -18,6 +18,7 @@ import {
   Tabs,
 } from "../components/ui";
 import type { Fiscal as FiscalData } from "../types";
+import { FiscalTrends } from "../components/FiscalTrends";
 
 function HistoryChart({
   rows,
@@ -105,18 +106,19 @@ function HistoryChart({
 export function Fiscal() {
   const { params } = useLocation();
   const basis = params.get("basis") || "actual";
-  const year =
-    params.get("year") ||
-    (basis === "budget" ? "2026" : basis === "proposal" ? "2027" : "2024");
-  const resource = useResource<FiscalData>("fiscal?" + query({ year, basis }));
+  const selectedYear = params.get("year");
+  const resource = useResource<FiscalData>(
+    "fiscal?" + query({ year: selectedYear, basis }),
+  );
   const data = resource.data;
+  const year = selectedYear || (data ? String(data.selectedYear) : "");
   const values = data?.values;
   return (
     <div className="page stack">
       <PageHeader
         title="나라 살림"
         context="국가재정"
-        description="나라의 수입·지출·재정수지와 채무를 같은 기준에서 확인합니다."
+        description="나라 살림이 얼마나 늘었고, 어느 분야와 부처의 비중이 달라졌는지 확인합니다."
       />
       <div className="filters">
         <Tabs
@@ -129,20 +131,16 @@ export function Fiscal() {
           onChange={(basis) =>
             changeFilters({
               basis,
-              year:
-                basis === "budget" ? 2026 : basis === "proposal" ? 2027 : 2024,
+              year: null,
             })
           }
         />
         <Select
           label="재정 연도"
           value={year}
-          options={(basis === "actual"
-            ? data?.actualYears ||
-              Array.from({ length: 11 }, (_, i) => 2024 - i)
-            : basis === "budget"
-              ? [2026]
-              : [2027]
+          options={(
+            data?.availableYears[basis as "actual" | "budget" | "proposal"] ||
+            []
           ).map((y) => ({ value: String(y), label: y + "년" }))}
           onChange={(year) => changeFilters({ year })}
         />
@@ -152,30 +150,43 @@ export function Fiscal() {
       ) : (
         <>
           <ScopeBar scope={data.scope} />
+          <FiscalTrends data={data} />
           {values ? (
             <>
               <div className="metrics">
                 <Stat
                   accent
-                  label="연간 총수입"
+                  label={
+                    values.through_month === 12 ? "연간 총수입" : "누계 총수입"
+                  }
                   value={shortWon(values.total_revenue)}
                   exact={values.total_revenue}
-                  detail={year + ".01–12 · 결산"}
+                  detail={year + `.01–${values.through_month} · 집행 누계`}
                 />
                 <Stat
-                  label="연간 총지출"
+                  label={
+                    values.through_month === 12 ? "연간 총지출" : "누계 총지출"
+                  }
                   value={shortWon(values.total_expenditure)}
                   exact={values.total_expenditure}
-                  detail={year + ".01–12 · 결산"}
+                  detail={year + `.01–${values.through_month} · 집행 누계`}
                 />
                 <Stat
-                  label="연간 통합재정수지"
+                  label={
+                    values.through_month === 12
+                      ? "연간 통합재정수지"
+                      : "누계 통합재정수지"
+                  }
                   value={shortWon(values.integrated_balance)}
                   exact={values.integrated_balance}
                   detail="총수입 − 총지출"
                 />
                 <Stat
-                  label="연간 관리재정수지"
+                  label={
+                    values.through_month === 12
+                      ? "연간 관리재정수지"
+                      : "누계 관리재정수지"
+                  }
                   value={shortWon(values.managed_balance)}
                   exact={values.managed_balance}
                   detail="사회보장성기금 수지 제외"

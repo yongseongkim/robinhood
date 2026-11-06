@@ -4,6 +4,7 @@ import json
 from statistics import median
 
 from .db import escaped_like, payload, records
+from .fiscal import available_years, build_trends, sections
 from .repository import NotFound, Repository
 
 
@@ -306,9 +307,16 @@ class Dashboard(Repository):
             "localFiscalAvailable": False,
         }
 
-    def fiscal(self, year=2024, basis="actual"):
+    def fiscal(self, year=None, basis="actual"):
         fiscal = payload(self.db, "fiscal", {})
+        available = available_years(fiscal)
         years = fiscal.get("actuals", {}).get("years", {})
+        if year is None:
+            if not available[basis]:
+                raise NotFound("해당 기준의 재정 수집본이 없습니다.")
+            year = available[basis][0]
+            if basis == "actual":
+                year = next((y for y in available[basis] if years[str(y)].get("through_month") == 12), year)
         if basis == "actual":
             values = years.get(str(year))
             if not values:
@@ -340,20 +348,8 @@ class Dashboard(Repository):
 
         def section(name):
             container = fiscal.get(name, {})
-            if name == "expenditure_by_ministry":
-                if basis == "proposal":
-                    item = (
-                        container.get("proposal")
-                        if str(container.get("proposal", {}).get("year")) == str(year)
-                        else None
-                    )
-                elif basis == "budget":
-                    item = (
-                        container if str(container.get("year")) == str(year) else None
-                    )
-                else:
-                    item = container.get("history", {}).get(str(year))
-                return item
+            if name in {"expenditure_by_ministry", "expenditure_by_sector"}:
+                return sections(fiscal, name.removeprefix("expenditure_by_"))[basis].get(year)
             item = container.get("years", {}).get(str(year))
             if not item:
                 return None
@@ -381,6 +377,8 @@ class Dashboard(Repository):
             raise NotFound("해당 연도·기준의 예산 자료가 없습니다.")
         return {
             "scope": scope,
+            "selectedYear": year,
+            "availableYears": available,
             "values": values,
             "source": fiscal.get("source"),
             "sectors": sector,
@@ -393,9 +391,10 @@ class Dashboard(Repository):
             "history": [
                 {"year": y, **v}
                 for y, v in sorted(years.items())
-                if v.get("through_month") == 12
+                if v.get("through_month") == 12 and int(y) <= year
             ],
             "actualYears": sorted((int(y) for y in years), reverse=True),
+            "trends": build_trends(fiscal, year, basis),
         }
 
     def sources(self):

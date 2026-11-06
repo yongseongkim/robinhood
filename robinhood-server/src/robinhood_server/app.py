@@ -19,7 +19,7 @@ from .job_store import history, latest
 def create_app(config: Settings = settings):
     app = FastAPI(
         title="나랏일보고서 API",
-        version="0.1.0",
+        version="0.2.0",
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
     )
@@ -277,7 +277,7 @@ def create_app(config: Settings = settings):
     @app.get("/api/v1/fiscal")
     def fiscal(
         repo: Repo,
-        year: int = Query(2024, ge=2010, le=2100),
+        year: int | None = Query(None, ge=2010, le=2100),
         basis: Literal["actual", "budget", "proposal"] = "actual",
     ):
         return repo.fiscal(year, basis)

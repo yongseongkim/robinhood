@@ -33,6 +33,7 @@ Public sources -> Worker -> Raw files
 - `deploy/Dockerfile`: ARM64 `api` (React 빌드 포함), `worker` (Chromium·수집 의존성) target.
 - `deploy/helm/`: 웹과 API를 함께 제공하는 Service `robinhood:80`, API·worker·PreSync migration·원본 PVC. Namespace·DB 계정·Secret·운영 values·ArgoCD·Cloudflare는 homelab-infra가 소유.
 - `.github/workflows/images.yml`: PR 빌드 검증, `v*` 태그·수동 실행 시 두 이미지를 OCIR에 게시. CI 인증은 repository Secrets `OCI_REGISTRY_USERNAME`, `OCI_AUTH_TOKEN`; 클러스터 pull Secret은 homelab-infra가 관리. 두 이미지 게시 후 같은 태그로 수동 동기화.
+- 나라 살림은 공식 수집 자료의 결산·확정 예산·정부안을 구분해 연도별 증감·비중 추세를 제공. 정부안은 전년도 확정 예산과 비교하며 결측·0원 기준액·부처명 변경에서 계산할 수 없는 증감률은 null.
 
 원본·중간 결과는 파일로 보관하고 검증한 조회 데이터를 DB에 반영합니다. 원본 문서와 정정 이력은 구분해 관리합니다. 데이터 갱신은 다음 API 조회에 반영되며 웹을 다시 빌드할 필요가 없습니다.
 

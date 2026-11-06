@@ -423,7 +423,16 @@ def sheets_xlsx(path):
             out.append((sh.name, rows))
         return out
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    return [(ws.title, [list(r) for r in ws.iter_rows(values_only=True)]) for ws in wb.worksheets]
+    try:
+        out = []
+        for ws in wb.worksheets:
+            # 일부 원본이 XFD 열까지 서식을 선언하므로 선언 범위 대신 실제 XML 행을 읽는다.
+            ws.reset_dimensions()
+            out.append((ws.title, [list(row) for row in ws.iter_rows(values_only=True)
+                                   if any(value is not None for value in row)]))
+        return out
+    finally:
+        wb.close()
 
 
 def is_blank_template(path):

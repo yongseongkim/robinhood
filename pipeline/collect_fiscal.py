@@ -42,7 +42,7 @@ DATASETS = {
     "GrossExpend": {"name": "총지출(월별 누계)", "odtId": "KXB8M1QM10T1V8XNA43KY7M07", "unit": "조원", "year_param": "OJ_YY", "years": range(2014, THIS_YEAR + 1)},
     "BudgetBalance": {"name": "재정수지(월별 누계)", "odtId": "45DHAZ24H7WWJ0VG03Q666V46", "unit": "조원", "year_param": "OJ_YY", "years": range(2014, THIS_YEAR + 1)},
     "TotalExpenditure5": {"name": "세부사업 예산편성현황(총지출)", "odtId": "5Y5A50K2L4CW2IRKI2J0F2C8T", "unit": "천원", "year_param": "FSCL_YY",
-                          "years": [THIS_YEAR + 1, THIS_YEAR, THIS_YEAR - 1], "extra": {"BDG_FND_DIV_CD": "0", "ANEXP_INQ_STND_CD": "1"}},
+                          "years": range(max(2010, THIS_YEAR - 4), THIS_YEAR + 2), "extra": {"BDG_FND_DIV_CD": "0", "ANEXP_INQ_STND_CD": "1"}},
 }
 SOURCE_PAGE = "https://www.openfiscaldata.go.kr/op/ko/sd/UOPKOSDA01?odtId="
 
@@ -188,39 +188,56 @@ def normalize(manifest):
         hist[y] = {"basis": "/".join(basis), "items": sorted(({"name": r["OFFC_NM"], "amount": won(r.get("SUM_EP_AMT"), EOK)} for r in rows),
                                                              key=lambda x: -(x["amount"] or 0))}
 
-    # 세부사업 (TotalExpenditure5): 가장 최근 회계연도의 국회확정 금액
+    # 확정 예산과 정부안을 연도별로 보존해야 과거 결산과 섞지 않고 편성 추이를 비교할 수 있다.
     te = load("TotalExpenditure5")
-    ministry = None
-    confirmed = [y for y, rows in te.items() if any(r.get("Y_YY_DFN_MEDI_KCUR_AMT") for r in rows)]
-    if confirmed:
-        year = max(confirmed, key=int)  # 국회 확정 금액이 있는 가장 최근 해 (심의 중인 해는 정부안만 있다)
-        rows = te[year]
+    budget_years, proposal_years = {}, {}
+    sector_budgets, sector_proposals = {}, {}
+
+    def budget_sections(rows, field, label):
         by_off = defaultdict(lambda: {"amount": 0, "programs": defaultdict(int)})
+        by_sector = defaultdict(lambda: {"name": "", "amount": 0})
         for r in rows:
-            amt = won(r.get("Y_YY_DFN_MEDI_KCUR_AMT") or 0, CHEON)
-            o = by_off[r.get("OFFC_NM")]
+            amt = won(r.get(field) or 0, CHEON)
+            o = by_off[r.get("OFFC_NM") or "미분류"]
             o["amount"] += amt
             o["programs"][(r.get("SACTV_NM"), r.get("PGM_NM"), r.get("FLD_NM"))] += amt
+            sector_name = r.get("FLD_NM") or "미분류"
+            code = str(r.get("FLD_CD") or sector_name)
+            by_sector[code]["name"] = sector_name
+            by_sector[code]["amount"] += amt
         items = []
         for name, o in sorted(by_off.items(), key=lambda kv: -kv[1]["amount"]):
             top = sorted(o["programs"].items(), key=lambda kv: -kv[1])[:10]
             items.append({"name": name, "amount": o["amount"],
                           "top_programs": [{"name": k[0], "program": k[1], "sector": k[2], "amount": v} for k, v in top]})
-        ministry = {"year": year, "basis": "국회 확정 예산, 총지출 기준(세부사업 합계, 추경 미반영)", "items": items, "history": hist}
-        later = [y for y in te if int(y) > int(year)]
+        return ({"basis": label, "items": items},
+                {"basis": label, "items": [{"code": code, **value} for code, value in sorted(by_sector.items())]})
+
+    for year, rows in te.items():
+        if any(r.get("Y_YY_DFN_MEDI_KCUR_AMT") for r in rows):
+            budget_years[year], sector_budgets[year] = budget_sections(
+                rows, "Y_YY_DFN_MEDI_KCUR_AMT", "국회 확정 예산, 총지출 기준(세부사업 합계, 추경 미반영)")
+        if any(r.get("Y_YY_MEDI_KCUR_AMT") for r in rows):
+            proposal_years[year], sector_proposals[year] = budget_sections(
+                rows, "Y_YY_MEDI_KCUR_AMT", "정부 예산안(국회 확정 예산과 별도)")
+    ministry = None
+    if budget_years:
+        year = max(budget_years, key=int)
+        ministry = {"year": year, **budget_years[year], "history": hist}
+        later = [y for y in proposal_years if int(y) > int(year)]
         if later:
             py = max(later, key=int)
-            prop = defaultdict(int)
-            for r in te[py]:
-                prop[r.get("OFFC_NM")] += won(r.get("Y_YY_MEDI_KCUR_AMT") or 0, CHEON)
-            ministry["proposal"] = {"year": py, "basis": "정부안(국회 심의 중, 확정 전)",
-                                    "items": [{"name": k, "amount": v} for k, v in sorted(prop.items(), key=lambda kv: -kv[1])]}
+            ministry["proposal"] = {"year": py, **proposal_years[py]}
     elif hist:
         y = max(hist, key=int)
         ministry = {"year": y, "basis": hist[y]["basis"], "items": hist[y]["items"], "history": hist}
         notes.append("세부사업 자료를 받지 못해 부처별 상위 사업은 없다.")
     if ministry:
+        ministry["budget_years"] = budget_years
+        ministry["proposal_years"] = proposal_years
         out["expenditure_by_ministry"] = ministry
+    out["expenditure_by_sector"]["budget_years"] = sector_budgets
+    out["expenditure_by_sector"]["proposal_years"] = sector_proposals
 
     # 국가채무 + 재정수지
     debt = {}

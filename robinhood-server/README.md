@@ -87,6 +87,8 @@ PostgreSQL `ocr_corrections`에 원본 해시, 추출 행 사본, 프롬프트·
 | `/rankings`, `/places`, `/places/{id}` | Top 10·분포·자주 결제한 장소 |
 | `/transactions`, `/transactions/{id}`, `/documents/{id}` | 거래·원문 근거 |
 | `/fiscal`, `/sources`, `/findings` | 재정통계·출처·규칙·확인 표시 |
+
+`/fiscal`은 `basis=actual|budget|proposal`, 선택적인 `year`를 받습니다. 연도가 없으면 수집된 최신 연도(결산은 우선 12월 누계 완료 연도)를 선택합니다. 응답의 `availableYears`는 기준별 선택 가능 연도이고 `trends.series`는 총규모·분야·부처별 시계열과 전년 대비 금액·증감률·비중 변화를 담습니다. 결산의 연간 비교에는 12월 누계만 포함하며, 정부안은 전년도 확정 예산과 비교하고 두 점의 기준을 각각 표시합니다. 누락 항목이나 분모가 0인 증감률은 null입니다.
 | `/jobs/status`, `/jobs/history?limit=20` | 최근 실행 상태·다음 실행·실행 이력 |
 
 금액 단위는 원입니다. 응답의 `scope`에 날짜·집계 종류·재원·보고서 ID가 포함됩니다. 재원을 합산하지 않고, 재수록 중복·문서 기간 밖 날짜는 합계에서 제외합니다. 빠진 달의 금액은 null입니다. 이름은 기본 가명이고 `ROBINHOOD_PSEUDONYMS=false`일 때 공개 자료의 원래 이름을 사용합니다. 가명은 표시 선택이며 익명화 보장이 아닙니다. 사업자번호 마스킹은 유지합니다.

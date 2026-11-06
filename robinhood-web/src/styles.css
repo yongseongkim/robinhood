@@ -768,6 +768,37 @@ td a:not(.text-link) {
   color: var(--soft);
   margin-top: 10px;
 }
+.fiscal-trends > .select-control {
+  max-width: 440px;
+}
+.fiscal-change-story {
+  border-left: 3px solid var(--blue);
+  background: var(--cool);
+  padding: 18px 22px;
+  line-height: 1.9;
+  font-size: 15px;
+}
+.fiscal-change-story strong {
+  color: var(--blue);
+}
+.fiscal-trend-chart svg text {
+  font-size: 12px;
+}
+.fiscal-change-table {
+  min-width: 680px;
+}
+.fiscal-change-table th:first-child {
+  min-width: 150px;
+}
+.fiscal-change-table button {
+  text-align: left;
+  white-space: normal;
+}
+@media (max-width: 600px) {
+  .fiscal-trend-chart svg text {
+    font-size: 24px;
+  }
+}
 .map-steps > .panel {
   padding: 20px;
   gap: 12px;

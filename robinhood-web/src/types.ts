@@ -336,8 +336,28 @@ export type Geo = {
 };
 export type FiscalRow = {
   name: string;
+  code?: string;
   amount: number;
   top_programs?: { name: string; amount: number; sector: string }[];
+};
+export type FiscalPoint = {
+  year: number;
+  amount: number | null;
+  basis: "actual" | "budget" | "proposal" | null;
+  label: string | null;
+  share: number | null;
+};
+export type FiscalTrend = {
+  id: string;
+  name: string;
+  dimension: "total" | "sector" | "ministry";
+  points: FiscalPoint[];
+  current: FiscalPoint | null;
+  previous: FiscalPoint | null;
+  denominator: string | null;
+  delta: number | null;
+  rate: number | null;
+  shareDeltaPp: number | null;
 };
 export type FiscalValues = {
   total_revenue: number;
@@ -351,6 +371,9 @@ export type FiscalValues = {
 };
 export type Fiscal = {
   scope: Scope;
+  selectedYear: number;
+  availableYears: Record<"actual" | "budget" | "proposal", number[]>;
+  trends: { series: FiscalTrend[]; note: string };
   values?: FiscalValues;
   sectors?: { basis: string; items: FiscalRow[] };
   ministries?: { basis: string; items: FiscalRow[] };
