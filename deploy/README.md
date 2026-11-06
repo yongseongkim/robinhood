@@ -17,10 +17,23 @@ helm lint deploy/helm
 helm template robinhood deploy/helm --namespace robinhood
 ```
 
-GitHub Actions `Build ARM64 images`는 PR에서 빌드를 검증하고 `v*` 태그 또는 수동 실행에서 OCIR에 이미지를 게시합니다.
-`v0.1.0`은 `yny.ocir.io/axrudau2tcfl/robinhood-{api,worker}:0.1.0`을 만듭니다.
-수동 실행은 `sha-<short commit>` 태그를 만듭니다. 배포 values에는 두 이미지가 모두 게시된 동일한 태그를 지정합니다.
+GitHub Actions `Release ARM64 images`는 PR에서 빌드를 검증하고 `vMAJOR.MINOR.PATCH` 태그 push 시 자동 배포합니다.
+예를 들어 앱 저장소에서 다음과 같이 새 버전을 게시합니다. 이미 사용한 태그는 변경하지 않습니다.
+
+```bash
+git tag -a v0.3.0 -m 'Release v0.3.0'
+git push origin v0.3.0
+```
+
+두 ARM64 이미지 `yny.ocir.io/axrudau2tcfl/robinhood-{api,worker}:0.3.0`이 모두 게시되어야 승격 job이 실행됩니다.
+승격은 태그의 소스에 차트 `version`·`appVersion`과 `images.tag`를 맞춘 snapshot을 `deploy/production` 브랜치에 기록합니다.
+`deploy/release.json`에는 릴리스 태그와 원본 commit이 남습니다. ArgoCD가 이 브랜치를 자동 동기화하며 인프라 values는 이미지 태그를 덮어쓰지 않습니다.
+`main`의 변경은 다음 릴리스 태그를 게시할 때 반영됩니다. 승격은 직렬 실행되고 늦게 끝난 이전 버전은 건너뛰므로 운영 버전이 자동으로 내려가지 않습니다.
+같은 태그의 재실행은 재승격하지 않으며, 다른 commit으로 옮긴 운영 태그는 거부합니다. prerelease·build suffix는 지원하지 않습니다.
+되돌릴 때는 수정한 소스에 현재 운영보다 높은 새 버전 태그를 붙입니다.
+수동 workflow 실행은 `sha-<short commit>` 이미지만 게시하고 운영 브랜치를 승격하지 않습니다.
 CI에는 repository Secrets `OCI_REGISTRY_USERNAME`, `OCI_AUTH_TOKEN`을 설정하고, 클러스터에는 homelab-infra가 관리하는 `oci-registry-secret`을 준비합니다. 인증 원본은 homelab-infra의 SOPS 파일입니다.
+승격 job만 기본 `GITHUB_TOKEN`에 `contents: write`를 부여하므로 인프라 저장소 쓰기 토큰은 필요하지 않습니다.
 
 worker에는 `WORKER_DATABASE_URL`의 값을 `DATABASE_URL`로, API에는 조회 URL을 전달합니다.
 출처 키는 `ASSEMBLY_API_KEY`, `OPENFISCAL_API_KEY`로 주입하므로 컨테이너에는 GCP 인증이나 SOPS가 필요하지 않습니다.
