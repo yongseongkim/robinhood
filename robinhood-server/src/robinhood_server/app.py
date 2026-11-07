@@ -114,6 +114,14 @@ def create_app(config: Settings = settings):
     ):
         return repo.overview(region, report_period(report), council_scope(year))
 
+    @app.get("/api/v1/member-rankings")
+    def member_rankings(
+        repo: Repo,
+        report: str = "ka:2024-22",
+        party: str = Query("", max_length=100),
+    ):
+        return repo.member_rankings(report_period(report), party)
+
     @app.get("/api/v1/members")
     def members(
         repo: Repo,
