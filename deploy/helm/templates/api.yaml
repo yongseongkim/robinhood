@@ -38,8 +38,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.database }}
                   key: API_DATABASE_URL
-            - name: ROBINHOOD_PSEUDONYMS
-              value: {{ .Values.api.pseudonyms | quote }}
             - name: NAVER_MAPS_CLIENT_ID
               value: {{ .Values.api.naverMapsClientId | quote }}
           # 데이터가 없는 첫 수집 중에도 서버를 재시작하지 않는다.

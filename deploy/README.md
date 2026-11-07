@@ -7,7 +7,7 @@
 ## Homelab k3s 배포
 
 `Dockerfile`은 `api`, `worker` 두 target을 제공합니다. `api`가 React 빌드와 FastAPI를 8000 포트로 함께 제공하고, `worker`는 수집·발행을 실행합니다.
-`helm/`은 웹과 API를 함께 제공하는 ClusterIP Service `robinhood:80`, API Deployment, 단일 worker Deployment, PreSync migration Job과 원본 저장 PVC를 만듭니다.
+`helm/`은 웹과 API를 함께 제공하는 ClusterIP Service `robinhood:80`, API Deployment, 단일 worker Deployment, PreSync migration·PostSync 컬럼 정리 Job과 원본 저장 PVC를 만듭니다.
 namespace·DB·role·Secret·Cloudflare 연결은 [homelab-infra 운영 문서](https://github.com/yongseongkim/homelab-infra/blob/main/k8s/robinhood/README.md)를 따릅니다.
 
 ```bash
@@ -46,6 +46,9 @@ AI OCR 정정은 Helm 배포에서 꺼져 있습니다.
 
 API readiness는 `/api/health`를 사용해 최초 발행 전에는 실패합니다. startup·liveness는 DB와 무관한 `/api/openapi.json`을 사용합니다.
 worker 교체는 Recreate이며 SIGTERM 뒤 진행 중인 수집이 끝날 때까지 최대 130분을 기다립니다.
+기존 API가 사용하는 컬럼은 새 API·worker가 모두 Healthy가 된 뒤 PostSync의 `robinhood migrate --post-deploy`로 제거합니다.
+서버 코드는 교체 전·후 스키마에서 모두 원래 이름을 조회합니다. migration 004는 표시용 이름 컬럼과 이름 치환 메타데이터만 제거하므로 데이터 재수집이 필요 없습니다.
+컬럼 정리 이후에는 제거된 컬럼을 참조하는 이전 API·worker 이미지로 되돌리지 않습니다. 복구는 현재 스키마를 지원하는 수정 릴리스를 사용합니다.
 아래 systemd 절은 Kubernetes 대신 호스트 서비스를 사용하는 대안입니다. 같은 수집을 양쪽에서 동시에 활성화하지 않습니다.
 
 ## 환경과 권한
@@ -56,7 +59,6 @@ API 환경 파일 `/etc/robinhood/api.env` 예시:
 DATABASE_URL=postgresql://API_USER:ENCODED_PASSWORD@DB_HOST:5432/MAIN_DB?sslmode=require
 ROBINHOOD_DATABASE_SCHEMA=robinhood
 ROBINHOOD_VAR=/var/lib/robinhood
-ROBINHOOD_PSEUDONYMS=true
 NAVER_MAPS_CLIENT_ID=
 ```
 

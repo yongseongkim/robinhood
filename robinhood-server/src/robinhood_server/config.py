@@ -37,10 +37,6 @@ class Settings:
             os.getenv("ROBINHOOD_VAR", ROOT / "robinhood-server/var")
         )
     )
-    pseudonyms: bool = field(
-        default_factory=lambda: os.getenv("ROBINHOOD_PSEUDONYMS", "true").lower()
-        == "true"
-    )
     naver_client_id: str = field(
         default_factory=lambda: os.getenv("NAVER_MAPS_CLIENT_ID", "")
     )

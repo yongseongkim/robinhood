@@ -16,10 +16,10 @@ from .config import Settings
 
 SCHEMA = """
 CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE TABLE subjects(id TEXT PRIMARY KEY, name TEXT, display_name TEXT, type TEXT, source TEXT, org TEXT,
+CREATE TABLE subjects(id TEXT PRIMARY KEY, name TEXT, type TEXT, source TEXT, org TEXT,
  role TEXT, term TEXT, party TEXT, district TEXT, details TEXT NOT NULL);
-CREATE TABLE merchants(id TEXT PRIMARY KEY, name TEXT, display_name TEXT, region TEXT, confidence TEXT,
- aliases TEXT, display_aliases TEXT, business_number TEXT, kind TEXT);
+CREATE TABLE merchants(id TEXT PRIMARY KEY, name TEXT, region TEXT, confidence TEXT,
+ aliases TEXT, business_number TEXT, kind TEXT);
 CREATE TABLE documents(id TEXT PRIMARY KEY, source TEXT, data TEXT NOT NULL);
 CREATE TABLE extras(subject_id TEXT PRIMARY KEY, assets TEXT, activity TEXT);
 CREATE TABLE transactions(id TEXT PRIMARY KEY, date TEXT, month TEXT, time TEXT, amount INTEGER NOT NULL,
@@ -132,21 +132,6 @@ def _build(config):
     documents = read(source / "documents.json", [])
     if not subjects or not merchants or not documents:
         raise ValueError("빈 수집 자료는 조회 데이터로 발행하지 않습니다.")
-    aliases = read(
-        Path(__file__).with_name("pseudonyms.json"), {"people": {}, "merchants": {}}
-    )
-    people = {
-        name: f"의원 {i + 1:03d}"
-        for i, name in enumerate(
-            sorted({s["name"] for s in subjects if s.get("type") == "LEGISLATOR"})
-        )
-    }
-    people.update(aliases.get("people", {}))
-    holder_names = sorted(
-        {h["name"] for s in subjects for h in (s.get("holders") or []) if h.get("name")}
-    )
-    for i, name in enumerate(holder_names):
-        people.setdefault(name, f"직책 보유자 {i + 1:03d}")
     mids = {mid: public_merchant_id(mid) for mid in merchants}
     pair_map = read(source / "reversal_pairs.json", {})
     pairs = {**pair_map, **{v: k for k, v in pair_map.items()}}
@@ -167,24 +152,11 @@ def _build(config):
         for subject in subjects:
             terms = subject.get("terms") or {}
             term = terms.get("제22대") or next(iter(reversed(terms.values())), {})
-            display_name = people.get(subject["name"], subject["name"])
-            if subject["type"] == "COUNCIL_MEMBER":
-                member_name = (subject.get("role") or "").removesuffix("의원").strip()
-                display_name = (
-                    (subject.get("org") or "")
-                    + " "
-                    + people.get(
-                        member_name,
-                        "의원 "
-                        + hashlib.sha256(subject["id"].encode()).hexdigest()[:5],
-                    )
-                )
             db.execute(
-                "INSERT INTO subjects VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO subjects VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (
                     subject["id"],
                     subject["name"],
-                    display_name,
                     subject["type"],
                     subject.get(
                         "org_source",
@@ -207,24 +179,16 @@ def _build(config):
                         packed(assembly["subjects"].get(subject["id"])),
                     ),
                 )
-        for i, (mid, merchant) in enumerate(sorted(merchants.items())):
-            name = merchant["name"]
-            display = aliases.get("merchants", {}).get(name, f"거래처 {i + 1:05d}")
+        for mid, merchant in sorted(merchants.items()):
             variants = merchant.get("aliases") or []
-            display_variants = [
-                aliases.get("merchants", {}).get(v, display + f" 표기 {j + 1}")
-                for j, v in enumerate(variants[:8])
-            ]
             db.execute(
-                "INSERT INTO merchants VALUES(?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO merchants VALUES(?,?,?,?,?,?,?)",
                 (
                     mids[mid],
-                    name,
-                    display,
+                    merchant["name"],
                     merchant.get("region"),
                     merchant.get("id_confidence"),
                     packed(variants[:8]),
-                    packed(display_variants),
                     mask_bizno(merchant.get("bizno"), merchant.get("bizno_kind")),
                     merchant.get("kind"),
                 ),
@@ -345,7 +309,6 @@ def _build(config):
             "geo": geo,
             "asset_source": assets.get("source"),
             "assembly_summary": assembly.get("summary"),
-            "people_aliases": people,
             "asset_people": assets["people"],
             "reviews": read(config.root / "data/reviews.json", {}),
         }

@@ -79,7 +79,7 @@ def search_path(conn, config, *, local=True):
     )
 
 
-def migrate(config):
+def migrate(config, *, post_deploy=False):
     with session(config, writer=True) as conn:
         # Serialize migrations separately; do not acquire this lock from API requests.
         conn.execute(
@@ -98,7 +98,11 @@ def migrate(config):
             row["version"]
             for row in conn.execute("SELECT version FROM schema_migrations")
         }
-        for path in sorted(Path(__file__).with_name("migrations").glob("*.sql")):
+        directory = Path(__file__).with_name("migrations")
+        paths = list(directory.glob("*.sql"))
+        if post_deploy:
+            paths.extend((directory / "post_deploy").glob("*.sql"))
+        for path in sorted(paths, key=lambda path: path.name):
             version = int(path.name.split("_", 1)[0])
             if version not in applied:
                 conn.execute(path.read_text())

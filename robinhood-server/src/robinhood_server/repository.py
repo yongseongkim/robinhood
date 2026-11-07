@@ -13,13 +13,6 @@ class NotFound(LookupError):
 class Repository:
     def __init__(self, db, config):
         self.db, self.config = db, config
-        self.aliases = payload(db, "people_aliases", {}) if config.pseudonyms else {}
-
-    def name(self, row):
-        return row["display_name"] if self.config.pseudonyms else row["name"]
-
-    def person_name(self, name):
-        return self.aliases.get(name, name)
 
     def where(self, scope, extra="", values=()):
         sql = "t.duplicate_of IS NULL AND t.valid_period=1 AND t.funding_type=? AND t.date>=? AND t.date<=?"
@@ -73,7 +66,7 @@ class Repository:
         for holder in raw.get("holders") or []:
             holders.append(
                 {
-                    "name": self.person_name(holder.get("name")),
+                    "name": holder.get("name"),
                     "party": holder.get("party"),
                     "start": holder.get("period_start"),
                     "end": holder.get("period_end"),
@@ -89,19 +82,14 @@ class Repository:
                 (sid,),
             )
         ]
-        role = (
-            "의원"
-            if self.config.pseudonyms and row["type"] == "COUNCIL_MEMBER"
-            else row["role"]
-        )
         return {
             "id": row["id"],
-            "name": self.name(row),
+            "name": row["name"],
             "type": row["type"],
             "source": row["source"],
             "reports": reports,
             "org": row["org"],
-            "role": role,
+            "role": row["role"],
             "term": row["term"],
             "party": term.get("party", row["party"]),
             "district": term.get("district", row["district"]),
@@ -127,8 +115,7 @@ class Repository:
             extra += f" AND {party_expr}=?"
             values.append(party)
         if q:
-            name_column = "s.display_name" if self.config.pseudonyms else "s.name"
-            extra += f" AND ({name_column} LIKE ? ESCAPE '\\' OR {district_expr} LIKE ? ESCAPE '\\')"
+            extra += f" AND (s.name LIKE ? ESCAPE '\\' OR {district_expr} LIKE ? ESCAPE '\\')"
             values.extend([escaped_like(q), escaped_like(q)])
         if region:
             parts = region.split()
@@ -147,14 +134,11 @@ class Repository:
         where, args = self.where(scope, extra, values)
         rows = records(
             self.db,
-            f"""SELECT s.id,s.name,s.display_name,{party_expr} party,{district_expr} district,
+            f"""SELECT s.id,s.name,{party_expr} party,{district_expr} district,
           SUM(t.amount) amount,COUNT(*) count FROM transactions t JOIN subjects s ON s.id=t.subject_id
           WHERE {where} GROUP BY s.id HAVING SUM(t.amount)>0 ORDER BY amount DESC,s.id""",
             args,
         )
-        for r in rows:
-            r["name"] = self.name(r)
-            del r["display_name"]
         return rows, extra, values
 
     def members(
@@ -283,24 +267,15 @@ class Repository:
             if row["merchant_id"]
             else None
         )
-        payee = self.name(merchant) if merchant else row["payee"]
-        if self.config.pseudonyms and row["payee_type"] == "INDIVIDUAL":
+        payee = merchant["name"] if merchant else row["payee"]
+        if row["payee_type"] == "INDIVIDUAL":
             payee = "개인(비공개)"
-        description = row.get("description")
-        if self.config.pseudonyms and description:
-            source_name = self.db.execute(
-                "SELECT name FROM subjects WHERE id=?", (row["subject_id"],)
-            ).fetchone()[0]
-            if len(source_name) >= 3:
-                description = description.replace(source_name, subject["name"])
-            if merchant:
-                description = description.replace(merchant["name"], payee)
         return {
             "id": row["id"],
             "date": row["date"],
             "time": row["time"],
             "amount": row["amount"],
-            "description": description,
+            "description": row.get("description"),
             "category": row["category"],
             "subjectId": row["subject_id"],
             "subjectName": subject["name"],
@@ -427,14 +402,6 @@ class Repository:
             observed = f.get("observed", {})
             if observed.get("merchantId"):
                 observed["merchantId"] = public_merchant_id(observed["merchantId"])
-            if self.config.pseudonyms:
-                f["explanation"] = (
-                    "규칙에 따라 추가 확인이 필요한 기록입니다. 근거 거래와 정상적인 설명을 함께 확인해 주세요."
-                )
-                if "merchantName" in observed:
-                    observed["merchantName"] = "거래처(가명)"
-                if "payee" in observed:
-                    observed["payee"] = "거래처(가명)"
             f["reviewHistory"] = payload(self.db, "reviews", {}).get(f["id"], [])
             result.append(f)
         return result

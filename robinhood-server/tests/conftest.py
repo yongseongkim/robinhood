@@ -45,6 +45,7 @@ def config(tmp_path):
                 "org_source": "mapo",
                 "role": "의장",
                 "term": "제9대 후반기",
+                "holders": [{"name": "백남환", "party": "국민의힘"}],
             },
         ],
     )
@@ -54,6 +55,7 @@ def config(tmp_path):
             {
                 "id": "b1071638735",
                 "name": "가시리",
+                "aliases": ["가시리(여의도점)", "가시리 여의도점"],
                 "region": "서울 영등포구",
                 "bizno": "107-16-38735",
                 "bizno_kind": "INDIVIDUAL_BUSINESS",
@@ -118,13 +120,13 @@ def config(tmp_path):
         value.update(extra)
         rows.append(value)
 
-    row("retained", 10000)
+    row("retained", 10000, category="간담회_식대")
     row("cancelled", 90000)
     row("refund", -90000)
     row("duplicate", 10000, duplicate_of="retained")
     row("outside", 500000, quality={"flags": ["DATE_OUTSIDE_REPORT_PERIOD"]})
     row(
-        "private", 2000, merchant_id=None, payee_type="INDIVIDUAL", payee_display="개인"
+        "private", 2000, merchant_id=None, payee_type="INDIVIDUAL", payee_display="홍길동"
     )
     row(
         "local",

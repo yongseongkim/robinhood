@@ -38,7 +38,8 @@ input,
 select {
   -webkit-tap-highlight-color: transparent;
 }
-button {
+button,
+select:not(:disabled) {
   cursor: pointer;
 }
 button:disabled {
@@ -811,6 +812,9 @@ td a:not(.text-link) {
   height: 100%;
   background: #edf1f4;
   display: block;
+}
+.region-map .map-region[role="button"] {
+  cursor: pointer;
 }
 .region-map .map-region path {
   fill: #fff;

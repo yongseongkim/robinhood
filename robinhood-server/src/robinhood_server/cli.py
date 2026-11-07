@@ -14,7 +14,12 @@ def main():
     parser = argparse.ArgumentParser(prog="robinhood")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("index", help="이미 수집된 자료로 조회 인덱스 생성")
-    sub.add_parser("migrate", help="서비스 전용 PostgreSQL 스키마 생성·마이그레이션")
+    migration = sub.add_parser(
+        "migrate", help="서비스 전용 PostgreSQL 스키마 생성·마이그레이션"
+    )
+    migration.add_argument(
+        "--post-deploy", action="store_true", help="새 API·worker 교체 후 컬럼 정리까지 적용"
+    )
     correction = sub.add_parser(
         "ocr-correct", help="추출된 OCR 표 텍스트만 정정 (원본 변경 없음)"
     )
@@ -49,7 +54,7 @@ def main():
     elif args.command == "migrate":
         if not settings.postgres:
             parser.error("DATABASE_URL 또는 ROBINHOOD_DATABASE_URL을 설정해 주세요.")
-        migrate(settings)
+        migrate(settings, post_deploy=args.post_deploy)
         print(
             json.dumps(
                 {

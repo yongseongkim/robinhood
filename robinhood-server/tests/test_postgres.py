@@ -2,6 +2,7 @@ from dataclasses import replace
 from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
+import json
 import os
 import sqlite3
 import uuid
@@ -25,6 +26,7 @@ from robinhood_server.postgres import (
     normalize,
     publish,
     qmarks,
+    search_path,
     session,
 )
 
@@ -68,7 +70,7 @@ def test_service_schema_is_isolated(schema):
 
 
 @pytest.fixture
-def pg_config(config):
+def pg_schema(config):
     url = os.getenv("TEST_POSTGRES_URL")
     if not url:
         pytest.skip("TEST_POSTGRES_URL enables live PostgreSQL integration tests.")
@@ -89,6 +91,54 @@ def pg_config(config):
                     sql.Identifier(cfg.database_schema)
                 )
             )
+
+
+@pytest.fixture
+def pg_config(pg_schema):
+    migrate(pg_schema, post_deploy=True)
+    return pg_schema
+
+
+def test_source_names_work_before_and_after_post_deploy_cleanup(pg_schema):
+    build_index(pg_schema)
+    with session(pg_schema, writer=True) as conn:
+        search_path(conn, pg_schema)
+        conn.execute("UPDATE subjects SET display_name='이전 표시 이름'")
+        conn.execute(
+            "UPDATE merchants SET display_name='이전 거래처', display_aliases='[]'"
+        )
+        conn.execute(
+            "INSERT INTO metadata VALUES ('people_aliases', %s::jsonb)",
+            (json.dumps({"정청래": "이전 표시 이름"}),),
+        )
+    migrate(pg_schema)
+    with connect(pg_schema) as conn:
+        assert conn.execute(
+            "SELECT display_name FROM subjects WHERE id='na-279'"
+        ).fetchone()[0] == "이전 표시 이름"
+
+    api = TestClient(create_app(pg_schema))
+    assert api.get("/api/v1/members?q=정청래").json()["rows"][0]["name"] == "정청래"
+    assert "pseudonyms" not in api.get("/api/v1/meta").json()
+    migrate(pg_schema, post_deploy=True)
+    migrate(pg_schema, post_deploy=True)
+    with connect(pg_schema) as conn:
+        columns = {
+            row[0]
+            for row in conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema=? AND table_name IN ('subjects','merchants')",
+                (pg_schema.database_schema,),
+            )
+        }
+        assert not columns & {"display_name", "display_aliases"}
+        assert not conn.execute(
+            "SELECT 1 FROM metadata WHERE key='people_aliases'"
+        ).fetchone()
+    assert api.get("/api/health").status_code == 200
+    assert api.get("/api/v1/members?q=정청래").json()["total"] == 1
+    build_index(pg_schema)
+    assert api.get("/api/health").status_code == 200
 
 
 def test_postgres_api_contract_and_repeatable_reads(pg_config):
@@ -136,6 +186,48 @@ def test_postgres_failed_copy_rolls_back(pg_config, config, tmp_path):
         publish(pg_config, bad)
     with connect(pg_config) as conn:
         assert conn.execute("SELECT COUNT(*) n FROM transactions").fetchone()[0] == 8
+
+
+def test_postgres_council_findings_preserve_scope_and_subject_integrity(pg_config):
+    path = pg_config.data / "findings.json"
+    findings = json.loads(path.read_text())
+    council_finding = {
+        "id": "council-disclosure-gap",
+        "ruleId": "DISCLOSURE_GAP",
+        "subjectId": "org-mapo",
+        "sourceId": "mapo",
+        "fundingType": None,
+        "observed": {"missingMonths": ["2024-02"]},
+        "evidenceIds": [],
+    }
+    findings.append(council_finding)
+    path.write_text(json.dumps(findings))
+    build_index(pg_config)
+    build_index(pg_config)
+    api = TestClient(create_app(pg_config))
+    assert api.get("/api/health").status_code == 200
+    page = api.get("/api/v1/findings", params={"subjectId": "org-mapo"}).json()
+    assert page["total"] == 1
+    assert page["rows"][0]["subjectId"] == "org-mapo"
+    assert page["rows"][0]["observed"] == council_finding["observed"]
+    with connect(pg_config) as conn:
+        assert conn.execute(
+            "SELECT spending_subject_id FROM findings WHERE id='test-finding'"
+        ).fetchone()[0] == "na-279"
+
+    # 의회 scope 예외는 규칙과 출처가 모두 일치할 때만 적용한다.
+    for changes in [
+        {"ruleId": "OTHER_RULE"},
+        {"sourceId": "seoul"},
+        {"subjectId": "missing"},
+    ]:
+        path.write_text(json.dumps([*findings[:-1], {**council_finding, **changes}]))
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            build_index(pg_config)
+        assert api.get("/api/health").status_code == 200
+        assert api.get(
+            "/api/v1/findings", params={"subjectId": "org-mapo"}
+        ).json()["total"] == 1
 
 
 def test_postgres_cross_connection_exclusion_and_durable_schedule(pg_config):
