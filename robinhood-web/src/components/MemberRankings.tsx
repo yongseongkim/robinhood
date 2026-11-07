@@ -153,11 +153,6 @@ export function MemberRankings() {
               report={report}
             />
           </div>
-          {!data.personalIncome.available && (
-            <Panel title="개인 소득 순위">
-              <p>{data.personalIncome.note}</p>
-            </Panel>
-          )}
           <Section
             title="정당별 신고재산 Top 10"
             description={

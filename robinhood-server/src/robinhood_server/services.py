@@ -182,10 +182,6 @@ class Dashboard(Repository):
             "spending": ranked(scope, spending, "members"),
             "assets": ranked(asset_scope, self.asset_rows(party), "assets"),
             "politicalIncome": self.political_income_rankings(scope, party),
-            "personalIncome": {
-                "available": False,
-                "note": "개인 연간 소득 자료는 수집되지 않았습니다. 정치자금 수입이나 재산 증가액으로 대신 계산하지 않습니다.",
-            },
             "partyAssets": [
                 {"party": name, **ranked(asset_scope, rows, "assets")}
                 for name, rows in sorted(

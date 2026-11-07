@@ -14,7 +14,6 @@ def test_member_rankings_keep_independent_reporting_scopes(ranking_config):
     assert data["spending"]["scope"]["reportId"] == "ka:2024-22"
     assert data["assets"]["scope"]["start"] == "2025-12-31"
     assert data["assetSource"]["published"] == "2026-03-26"
-    assert data["personalIncome"]["available"] is False
 
 
 def test_each_party_top_ten_is_computed_from_all_asset_records(ranking_config):
