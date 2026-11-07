@@ -92,9 +92,7 @@ export default function App() {
               </Link>
             ))}
           </nav>
-          <span className="data-mode">
-            {meta.data?.pseudonyms ? "수집 자료 · 이름 가명" : "공개 수집 자료"}
-          </span>
+          <span className="data-mode">공개 수집 자료</span>
           <button
             className="menu-button"
             aria-label={menu ? "메뉴 닫기" : "메뉴 열기"}

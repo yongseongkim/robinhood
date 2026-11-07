@@ -18,7 +18,6 @@ class Dashboard(Repository):
         ]
         return {
             "serviceName": "나랏일보고서",
-            "pseudonyms": self.config.pseudonyms,
             "indexedAt": payload(self.db, "indexed_at"),
             "counts": payload(self.db, "counts", {}),
             "fundingTypes": payload(self.db, "funding", {}),
@@ -115,7 +114,7 @@ class Dashboard(Repository):
             rows = [
                 {
                     "id": p.get("sid"),
-                    "name": self.person_name(p["name"]),
+                    "name": p["name"],
                     "party": p.get("party"),
                     "district": p.get("district"),
                     "amount": p["total"][field],
@@ -184,8 +183,7 @@ class Dashboard(Repository):
     def _place_rows(self, scope, q=""):
         extra, values = "t.is_meal=1", []
         if q:
-            name_column = "m.display_name" if self.config.pseudonyms else "m.name"
-            extra += f" AND ({name_column} LIKE ? ESCAPE '\\' OR m.region LIKE ? ESCAPE '\\')"
+            extra += " AND (m.name LIKE ? ESCAPE '\\' OR m.region LIKE ? ESCAPE '\\')"
             values.extend([escaped_like(q), escaped_like(q)])
         where, args = self.where(scope, extra, values)
         return records(
@@ -199,7 +197,7 @@ class Dashboard(Repository):
             SELECT merchant_id,COUNT(*) "payerCount" FROM (
               SELECT merchant_id,subject_id FROM f GROUP BY merchant_id,subject_id HAVING SUM(amount)>0
             ) GROUP BY merchant_id
-          ) SELECT m.id,m.name,m.display_name,m.region,m.confidence,a.amount,a.count,a.payments,a.refunds,p."payerCount"
+          ) SELECT m.id,m.name,m.region,m.confidence,a.amount,a.count,a.payments,a.refunds,p."payerCount"
           FROM totals a JOIN merchants m ON m.id=a.merchant_id JOIN positive_payers p ON p.merchant_id=m.id
           WHERE a.amount>0 AND a.payments>0 ORDER BY a.payments DESC,a.amount DESC,m.id""",
             args,
@@ -227,9 +225,6 @@ class Dashboard(Repository):
         ]
         rows.sort(key=lambda r: (-r[sort_key], r["id"]))
         selected = rows[(page - 1) * page_size : page * page_size]
-        for r in selected:
-            r["name"] = self.name(r)
-            r.pop("display_name", None)
         return {
             "scope": scope,
             "rows": selected,
@@ -267,13 +262,9 @@ class Dashboard(Repository):
         return {
             "merchant": {
                 "id": mid,
-                "name": self.name(merchant),
+                "name": merchant["name"],
                 "region": merchant["region"],
-                "aliases": json.loads(
-                    merchant["display_aliases"]
-                    if self.config.pseudonyms
-                    else merchant["aliases"]
-                ),
+                "aliases": json.loads(merchant["aliases"]),
                 "confidence": merchant["confidence"],
                 "businessNumber": merchant["business_number"],
                 "kind": merchant["kind"],

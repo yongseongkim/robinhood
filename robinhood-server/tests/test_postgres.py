@@ -26,6 +26,7 @@ from robinhood_server.postgres import (
     normalize,
     publish,
     qmarks,
+    search_path,
     session,
 )
 
@@ -69,7 +70,7 @@ def test_service_schema_is_isolated(schema):
 
 
 @pytest.fixture
-def pg_config(config):
+def pg_schema(config):
     url = os.getenv("TEST_POSTGRES_URL")
     if not url:
         pytest.skip("TEST_POSTGRES_URL enables live PostgreSQL integration tests.")
@@ -90,6 +91,54 @@ def pg_config(config):
                     sql.Identifier(cfg.database_schema)
                 )
             )
+
+
+@pytest.fixture
+def pg_config(pg_schema):
+    migrate(pg_schema, post_deploy=True)
+    return pg_schema
+
+
+def test_source_names_work_before_and_after_post_deploy_cleanup(pg_schema):
+    build_index(pg_schema)
+    with session(pg_schema, writer=True) as conn:
+        search_path(conn, pg_schema)
+        conn.execute("UPDATE subjects SET display_name='이전 표시 이름'")
+        conn.execute(
+            "UPDATE merchants SET display_name='이전 거래처', display_aliases='[]'"
+        )
+        conn.execute(
+            "INSERT INTO metadata VALUES ('people_aliases', %s::jsonb)",
+            (json.dumps({"정청래": "이전 표시 이름"}),),
+        )
+    migrate(pg_schema)
+    with connect(pg_schema) as conn:
+        assert conn.execute(
+            "SELECT display_name FROM subjects WHERE id='na-279'"
+        ).fetchone()[0] == "이전 표시 이름"
+
+    api = TestClient(create_app(pg_schema))
+    assert api.get("/api/v1/members?q=정청래").json()["rows"][0]["name"] == "정청래"
+    assert "pseudonyms" not in api.get("/api/v1/meta").json()
+    migrate(pg_schema, post_deploy=True)
+    migrate(pg_schema, post_deploy=True)
+    with connect(pg_schema) as conn:
+        columns = {
+            row[0]
+            for row in conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema=? AND table_name IN ('subjects','merchants')",
+                (pg_schema.database_schema,),
+            )
+        }
+        assert not columns & {"display_name", "display_aliases"}
+        assert not conn.execute(
+            "SELECT 1 FROM metadata WHERE key='people_aliases'"
+        ).fetchone()
+    assert api.get("/api/health").status_code == 200
+    assert api.get("/api/v1/members?q=정청래").json()["total"] == 1
+    build_index(pg_schema)
+    assert api.get("/api/health").status_code == 200
 
 
 def test_postgres_api_contract_and_repeatable_reads(pg_config):

@@ -13,7 +13,6 @@ api:
   replicas: 1
   # 빈 DB의 첫 수집은 오래 걸리므로 기본 10분보다 길게 기다린다.
   progressDeadlineSeconds: 10800
-  pseudonyms: true
   naverMapsClientId: ""
   resources:
     requests:
