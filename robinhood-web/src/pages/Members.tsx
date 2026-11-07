@@ -13,10 +13,40 @@ import {
   Select,
   SourceNote,
   Stat,
+  Tabs,
 } from "../components/ui";
 import type { MemberPage } from "../types";
+import { MemberRankings } from "../components/MemberRankings";
 
 export function Members() {
+  const { params } = useLocation();
+  const listRequested = ["q", "region", "sort", "page", "month"].some((key) =>
+    params.has(key),
+  );
+  const view = params.get("view") || (listRequested ? "list" : "rankings");
+  return (
+    <div className="page stack members-page">
+      <PageHeader
+        title="의원·정당 찾아보기"
+        context="의원과 정당"
+        description="의원별 지출·신고재산·정치자금 수입 순위와 정당별 재산 Top 10을 비교합니다."
+      />
+      <Tabs
+        value={view}
+        items={[
+          { value: "rankings", label: "순위 한눈에" },
+          { value: "list", label: "의원 목록" },
+        ]}
+        onChange={(view) =>
+          changeFilters({ view, q: "", region: "", sort: "", month: "" })
+        }
+      />
+      {view === "list" ? <MemberList /> : <MemberRankings />}
+    </div>
+  );
+}
+
+function MemberList() {
   const { params } = useLocation();
   const meta = useMeta();
   const report = params.get("report") || "ka:2024-22",
@@ -36,12 +66,7 @@ export function Members() {
   const resource = useResource<MemberPage>("members?" + request);
   const data = resource.data;
   return (
-    <div className="page stack">
-      <PageHeader
-        title="의원·정당 찾아보기"
-        context="의원 목록"
-        description="이름·정당·지역구로 찾고, 같은 보고 범위에서 지출을 비교합니다."
-      />
+    <>
       <div className="filters">
         <SearchForm
           value={q}
@@ -174,6 +199,6 @@ export function Members() {
           </SourceNote>
         </>
       )}
-    </div>
+    </>
   );
 }

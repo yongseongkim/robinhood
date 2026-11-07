@@ -1,11 +1,36 @@
 from collections import defaultdict
 from calendar import monthrange
 import json
+import math
 from statistics import median
 
 from .db import escaped_like, payload, records
 from .fiscal import available_years, build_trends, sections
 from .repository import NotFound, Repository
+from .scopes import REPORTS
+
+
+def ranked(scope, rows, target, metric="amount"):
+    values = [row["value"] for row in rows]
+    med = median(values) if values else None
+    return {
+        "scope": scope,
+        "target": target,
+        "metric": metric,
+        "rows": [
+            {
+                **row,
+                "rank": index + 1,
+                "ratioToMedian": row["value"] / med if med and med > 0 else None,
+            }
+            for index, row in enumerate(rows[:10])
+        ],
+        "n": len(rows),
+        "median": med,
+        "total": sum(values) if values else None,
+        "mean": sum(values) / len(values) if values else None,
+        "categories": [],
+    }
 
 
 class Dashboard(Repository):
@@ -105,34 +130,125 @@ class Dashboard(Repository):
         )
         return [self.transaction_row(r) for r in rows]
 
+    def asset_scope(self):
+        source = payload(self.db, "asset_source", {}) or {}
+        basis = source.get("basis") or ""
+        return {
+            "kind": "as_of",
+            "label": (basis or "기준일 미기재") + " 신고 순재산",
+            "start": basis,
+            "end": basis,
+            "unit": "KRW",
+            "note": "신고대상 가족을 포함한 순재산으로 고지거부 재산은 제외됩니다. 신고가액 기준이며 시세·개인 소득과 다릅니다.",
+        }
+
+    def asset_rows(self, party="", metric="amount"):
+        field = "change" if metric == "change" else "cur"
+        rows = []
+        for person in payload(self.db, "asset_people", []) or []:
+            amount = (person.get("total") or {}).get(field)
+            if (
+                isinstance(amount, bool)
+                or not isinstance(amount, (int, float))
+                or not math.isfinite(amount)
+            ):
+                continue
+            if party and (person.get("party") or "미기재") != party:
+                continue
+            rows.append(
+                {
+                    "id": person.get("sid"),
+                    "name": person["name"],
+                    "party": person.get("party"),
+                    "district": person.get("district"),
+                    "amount": amount,
+                    "value": amount,
+                    "page": person.get("page"),
+                }
+            )
+        rows.sort(key=lambda row: (-row["value"], row["name"], row["id"] or ""))
+        return rows
+
+    def member_rankings(self, scope, party=""):
+        spending, _, _ = self.member_rows(scope, party=party)
+        for row in spending:
+            row["value"] = row["amount"]
+        assets = self.asset_rows()
+        by_party = defaultdict(list)
+        for row in assets:
+            by_party[row["party"] or "미기재"].append(row)
+        asset_scope = self.asset_scope()
+        return {
+            "spending": ranked(scope, spending, "members"),
+            "assets": ranked(asset_scope, self.asset_rows(party), "assets"),
+            "politicalIncome": self.political_income_rankings(scope, party),
+            "partyAssets": [
+                {"party": name, **ranked(asset_scope, rows, "assets")}
+                for name, rows in sorted(
+                    by_party.items(), key=lambda item: (-len(item[1]), item[0])
+                )
+                if not party or name == party
+            ],
+            "assetSource": payload(self.db, "asset_source", {}) or {},
+            "parties": sorted(
+                set(by_party)
+                | {
+                    row[0]
+                    for row in self.db.execute(
+                        "SELECT DISTINCT party FROM subjects WHERE type='LEGISLATOR' AND party IS NOT NULL"
+                    )
+                }
+            ),
+        }
+
+    def political_income_rankings(self, report_scope, party=""):
+        year, term_name = REPORTS[report_scope["reportId"]]
+        rows = []
+        for subject in records(
+            self.db, "SELECT id,name,details FROM subjects WHERE type='LEGISLATOR'"
+        ):
+            details = json.loads(subject["details"])
+            term = (details.get("terms") or {}).get(term_name)
+            if not term or (party and term.get("party") != party):
+                continue
+            income = (details.get("income") or {}).get(str(year)) or {}
+            values = [
+                amount
+                for category, amount in income.items()
+                if "중복 가능" not in category
+                and not isinstance(amount, bool)
+                and isinstance(amount, (int, float))
+                and math.isfinite(amount)
+            ]
+            if not values:
+                continue
+            amount = sum(values)
+            rows.append(
+                {
+                    "id": subject["id"],
+                    "name": subject["name"],
+                    "party": term.get("party"),
+                    "district": term.get("district"),
+                    "amount": amount,
+                    "value": amount,
+                }
+            )
+        rows.sort(key=lambda row: (-row["value"], row["name"], row["id"]))
+        scope = {
+            "kind": "annual",
+            "label": f"{year}년 수집자료 정치자금 수입 합계",
+            "start": f"{year}-01-01",
+            "end": f"{year}-12-31",
+            "fundingType": "POLITICAL_FUND",
+            "unit": "KRW",
+            "note": "후원회 기부금·차입금·본인 자산 등을 포함하고 이월·누계·계좌 간 이체는 제외합니다. 같은 연도의 수입을 대수 구분 없이 합산하며 개인 소득과 다릅니다.",
+        }
+        return ranked(scope, rows, "political_income")
+
     def rankings(self, scope, target="members", metric="amount", party="", category=""):
         if target == "assets":
-            people = payload(self.db, "asset_people", [])
-            if party:
-                people = [p for p in people if p.get("party") == party]
-            field = "change" if metric == "change" else "cur"
-            rows = [
-                {
-                    "id": p.get("sid"),
-                    "name": p["name"],
-                    "party": p.get("party"),
-                    "district": p.get("district"),
-                    "amount": p["total"][field],
-                    "value": p["total"][field],
-                    "page": p["page"],
-                }
-                for p in people
-            ]
-            rows.sort(key=lambda r: (-r["value"], r["name"]))
-            asset_source = payload(self.db, "asset_source", {})
-            scope = {
-                "kind": "as_of",
-                "label": asset_source.get("basis", "") + " 신고재산",
-                "start": asset_source.get("basis"),
-                "end": asset_source.get("basis"),
-                "unit": "KRW",
-                "note": "신고가액 기준이며 시세·개인 소득과 다릅니다.",
-            }
+            rows = self.asset_rows(party, metric)
+            scope = self.asset_scope()
             chart = []
         elif target == "councils":
             rows = [
@@ -151,27 +267,7 @@ class Dashboard(Repository):
             for r in rows:
                 r["value"] = r["amount"]
             chart = self.members(scope, party=party)["categories"]
-        values = [r["value"] for r in rows]
-        med = median(values) if values else None
-        top = [
-            {
-                **r,
-                "rank": i + 1,
-                "ratioToMedian": r["value"] / med if med and med > 0 else None,
-            }
-            for i, r in enumerate(rows[:10])
-        ]
-        result = {
-            "scope": scope,
-            "target": target,
-            "metric": metric,
-            "rows": top,
-            "n": len(rows),
-            "median": med,
-            "total": sum(values) if values else None,
-            "mean": sum(values) / len(values) if values else None,
-            "categories": chart,
-        }
+        result = {**ranked(scope, rows, target, metric), "categories": chart}
         if target == "members":
             result["monthly"] = self.members(scope, party=party)["monthly"]
         if target == "councils":

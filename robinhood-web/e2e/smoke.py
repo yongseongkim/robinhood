@@ -60,6 +60,8 @@ def main():
         page.get_by_label('시·도', exact=True).select_option('부산')
         expect(page.locator('main')).to_contain_text('부산 국회의원 보고자료')
         visit('/members', '의원·정당 찾아보기')
+        expect(page.get_by_role('heading', name='정당별 신고재산 Top 10', exact=True)).to_be_visible()
+        page.get_by_role('tab', name='의원 목록', exact=True).click()
         page.get_by_label('정당', exact=True).select_option('더불어민주당')
         expect(page.locator('.metrics')).to_contain_text('171명')
         page.get_by_label('정당', exact=True).select_option('')

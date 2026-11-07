@@ -157,3 +157,86 @@ def config(tmp_path):
 def client(config):
     with TestClient(create_app(config)) as api:
         yield api
+
+
+@pytest.fixture
+def ranking_config(config):
+    subjects_path = config.data / "subjects.json"
+    subjects = json.loads(subjects_path.read_text())
+    subjects[0]["income"] = {
+        "2024": {
+            "후원회 기부금": 100000,
+            "차입금": 5000,
+            "본인 자산": 2000,
+            "이월·누계(중복 가능)": 888888,
+            "계좌 간 이체(중복 가능)": 999999,
+        },
+        "2023": {"후원회 기부금": 7777777},
+    }
+    for sid, name, party, terms, income in [
+        ("na-800", "가상가", "국민의힘", "제22대", {"후원회 기부금": 200000}),
+        ("na-801", "가상나", "더불어민주당", "제22대", {"본인 자산": 0}),
+        ("na-802", "가상다", "국민의힘", "제22대", {}),
+        ("na-803", "가상라", "국민의힘", "제21대", {"후원회 기부금": 9999999}),
+        ("na-804", "가상마", "국민의힘", "제22대", {"계좌 간 이체(중복 가능)": 999999}),
+    ]:
+        subjects.append(
+            {
+                "id": sid,
+                "name": name,
+                "type": "LEGISLATOR",
+                "org": "국회",
+                "terms": {terms: {"party": party, "district": "서울 테스트구"}},
+                "income": {"2024": income},
+            }
+        )
+    subjects_path.write_text(json.dumps(subjects, ensure_ascii=False))
+    path = config.data / "expenditures.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows.append(
+        {**rows[0], "id": "other-member", "subject_id": "na-800", "amount": 40000}
+    )
+    path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows))
+    people = [
+        {
+            "name": "정청래" if i == 0 else f"재산신고인{i:02d}",
+            "sid": "na-279" if i == 0 else None,
+            "party": "더불어민주당",
+            "district": "서울 테스트구",
+            "page": i + 1,
+            "total": {"cur": 1000000 - i * 10000, "change": 1000},
+        }
+        for i in range(12)
+    ]
+    for name, sid, party, value in [
+        ("가상가", "na-800", "국민의힘", 3000000),
+        ("음수 재산", None, "무소속", -100),
+        ("0원 재산", None, "더불어민주당", 0),
+        ("미수집 재산", None, "더불어민주당", None),
+        ("정당 미기재", None, None, 500),
+    ]:
+        people.append(
+            {
+                "name": name,
+                "sid": sid,
+                "party": party,
+                "page": 20,
+                "total": {"cur": value, "change": 0},
+            }
+        )
+    (config.data / "assets.json").write_text(
+        json.dumps(
+            {
+                "source": {
+                    "title": "테스트 재산공보",
+                    "basis": "2025-12-31",
+                    "published": "2026-03-26",
+                    "url": "https://example.com/assets.pdf",
+                },
+                "people": people,
+            },
+            ensure_ascii=False,
+        )
+    )
+    build_index(config)
+    return config

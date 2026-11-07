@@ -283,7 +283,7 @@ export type Ranking = {
   total: number | null;
   mean: number | null;
   rows: {
-    id: string;
+    id: string | null;
     name: string;
     party?: string;
     district?: string;
@@ -292,11 +292,20 @@ export type Ranking = {
     count?: number;
     months?: number;
     rank: number;
+    page?: number;
     ratioToMedian?: number;
   }[];
   categories: Category[];
   monthly?: Month[];
   note?: string;
+};
+export type MemberRankings = {
+  spending: Ranking;
+  assets: Ranking;
+  politicalIncome: Ranking;
+  partyAssets: (Ranking & { party: string })[];
+  assetSource: Partial<AssetSource>;
+  parties: string[];
 };
 export type Meta = {
   serviceName: string;
