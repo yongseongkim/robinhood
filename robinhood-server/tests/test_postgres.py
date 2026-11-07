@@ -172,6 +172,20 @@ def test_postgres_api_contract_and_repeatable_reads(pg_config):
         assert api.get(path).status_code == 200
 
 
+def test_member_rankings_match_sqlite_after_postgres_publication(
+    pg_config, ranking_config
+):
+    build_index(pg_config)
+    postgres_api = TestClient(create_app(pg_config))
+    sqlite_api = TestClient(create_app(ranking_config))
+    for params in [{}, {"party": "없는정당"}, {"party": "국민의힘"}]:
+        response = postgres_api.get("/api/v1/member-rankings", params=params)
+        assert response.status_code == 200
+        assert response.json() == sqlite_api.get(
+            "/api/v1/member-rankings", params=params
+        ).json()
+
+
 def test_postgres_failed_copy_rolls_back(pg_config, config, tmp_path):
     build_index(pg_config)
     # A valid SQLite staging file with a PostgreSQL foreign-key violation forces

@@ -464,6 +464,61 @@ select {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 20px;
 }
+.member-ranking-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.member-ranking-list li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.member-ranking-list li:last-child {
+  border-bottom: 0;
+}
+.member-ranking-position {
+  color: var(--soft);
+  font-size: 12px;
+}
+.member-ranking-person {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.member-ranking-person > a,
+.member-ranking-person > span {
+  font-weight: 600;
+}
+.member-ranking-person small {
+  display: block;
+  margin-top: 4px;
+  color: var(--soft);
+}
+.member-ranking-value {
+  color: var(--blue);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.member-ranking-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  color: var(--soft);
+  font-size: 12px;
+}
+.member-ranking-summary strong {
+  color: var(--ink);
+}
+.member-ranking-card > .caption:last-child {
+  margin-top: auto;
+}
 .person-amount {
   font-size: 28px;
   color: var(--blue);
