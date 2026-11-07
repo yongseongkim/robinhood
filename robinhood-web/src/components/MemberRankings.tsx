@@ -154,6 +154,22 @@ export function MemberRankings() {
             />
           </div>
           <Section
+            title="재산 종류별 Top 10"
+            description="신고대상 가족을 포함한 금액으로 고지거부 재산은 제외합니다. 해당 항목에 금액이 수록된 사람끼리 비교하며 채무 차감 전 신고액입니다."
+          >
+            <div className="two-columns asset-category-rankings">
+              {data.assetCategories.map((category) => (
+                <RankingCard
+                  key={category.id}
+                  title={category.label + " Top 10"}
+                  ranking={category}
+                  report={report}
+                  assetUrl={data.assetSource.url}
+                />
+              ))}
+            </div>
+          </Section>
+          <Section
             title="정당별 신고재산 Top 10"
             description={
               data.assets.scope.label +
@@ -177,7 +193,8 @@ export function MemberRankings() {
             )}
           </Section>
           <SourceNote>
-            재산은 신고대상 가족을 포함한 순재산이며 고지거부 재산은 제외합니다.
+            총재산 순위는 채무를 뺀 순재산이며 종류별 순위는 채무 차감 전
+            신고액입니다. 신고대상 가족을 포함하고 고지거부 재산은 제외합니다.
             재산 증가액은 개인 소득으로 계산하지 않습니다.{" "}
             {data.assetSource.url && (
               <External url={data.assetSource.url}>

@@ -240,3 +240,46 @@ def ranking_config(config):
     )
     build_index(config)
     return config
+
+
+@pytest.fixture
+def asset_category_config(ranking_config):
+    path = ranking_config.data / "assets.json"
+    data = json.loads(path.read_text())
+    categories = {
+        "정청래": {"토지": 100, "건물": 500, "증권": 1000, "예금": 0, "가상자산": 0},
+        "재산신고인01": {"건물": 900, "증권": 100, "예금": 700, "가상자산": 30},
+        "재산신고인02": {
+            "토지": None, "건물": 300, "증권": None, "예금": "350", "가상자산": False,
+        },
+        "재산신고인03": {"건물": 100},
+        "재산신고인04": {"건물": 100},
+        "재산신고인05": {"건물": 100},
+        "재산신고인06": {"건물": 100},
+        "가상가": {
+            "토지": 700, "건물": 100, "증권": 2000, "예금": 200, "가상자산": 0,
+        },
+        "0원 재산": {"건물": 20000, "증권": 0, "예금": 0},
+        "미수집 재산": {"증권": 3000, "예금": None, "가상자산": True},
+    }
+    estates = {
+        "정청래": [{"lease": False, "cur": 400}, {"lease": True, "cur": 200}],
+        "재산신고인01": [{"lease": False, "cur": 100}, {"lease": True, "cur": 800}],
+        "재산신고인02": [{"lease": False, "cur": 300}],
+        "재산신고인04": [{"lease": True, "cur": None}],
+        "재산신고인05": [{"cur": 100}],
+        "재산신고인06": [{"lease": True, "cur": 200}],
+        "가상가": [{"lease": False, "cur": 800}],
+        "0원 재산": [{"lease": True, "cur": 20000}],
+    }
+    for person in data["people"]:
+        name = person["name"]
+        if name in categories:
+            person["cats"] = {
+                key: {"cur": value} for key, value in categories[name].items()
+            }
+        if name in estates:
+            person["realestate"] = estates[name]
+    path.write_text(json.dumps(data, ensure_ascii=False))
+    build_index(ranking_config)
+    return ranking_config

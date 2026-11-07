@@ -302,6 +302,7 @@ export type Ranking = {
 export type MemberRankings = {
   spending: Ranking;
   assets: Ranking;
+  assetCategories: (Ranking & { id: string; label: string })[];
   politicalIncome: Ranking;
   partyAssets: (Ranking & { party: string })[];
   assetSource: Partial<AssetSource>;

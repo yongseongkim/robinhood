@@ -10,6 +10,55 @@ from .repository import NotFound, Repository
 from .scopes import REPORTS
 
 
+ASSET_CATEGORIES = {
+    "realestate": (
+        "부동산(토지·건물)",
+        "토지·건물 소계에서 전세·임차권을 제외한 신고액입니다. 담보대출 등 채무는 차감하지 않습니다.",
+    ),
+    "securities": (
+        "증권(주식 등)",
+        "공보의 증권 소계로 주식 외 증권도 포함합니다. 주식만의 보유액이나 현재 시가와 다릅니다.",
+    ),
+    "deposits": (
+        "예금",
+        "공보의 예금 소계이며 별도 항목인 정치자금 계좌는 포함하지 않습니다.",
+    ),
+    "crypto": ("가상자산", "공보의 가상자산 소계이며 신고 기준일의 신고가액입니다."),
+}
+
+
+def asset_number(value):
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+    )
+
+
+def asset_category_amount(person, category):
+    cats = person.get("cats") or {}
+    if category != "realestate":
+        name = {"securities": "증권", "deposits": "예금", "crypto": "가상자산"}[category]
+        return (cats.get(name) or {}).get("cur")
+    amounts = [
+        (cats[name] or {}).get("cur") for name in ("토지", "건물") if name in cats
+    ]
+    estate = person.get("realestate")
+    if (
+        not amounts
+        or not all(asset_number(amount) for amount in amounts)
+        or not isinstance(estate, list)
+        or any(not isinstance(row.get("lease"), bool) for row in estate)
+    ):
+        return None
+    leases = [row.get("cur") for row in estate if row["lease"]]
+    if not all(asset_number(amount) for amount in leases):
+        return None
+    # 임차권 금액을 알 수 없거나 소계보다 크면 소유 부동산으로 오인하지 않는다.
+    amount = sum(amounts) - sum(leases)
+    return amount if amount >= 0 else None
+
+
 def ranked(scope, rows, target, metric="amount"):
     values = [row["value"] for row in rows]
     med = median(values) if values else None
@@ -142,16 +191,18 @@ class Dashboard(Repository):
             "note": "신고대상 가족을 포함한 순재산으로 고지거부 재산은 제외됩니다. 신고가액 기준이며 시세·개인 소득과 다릅니다.",
         }
 
-    def asset_rows(self, party="", metric="amount"):
+    def asset_rows(self, party="", metric="amount", category="", people=None):
         field = "change" if metric == "change" else "cur"
         rows = []
-        for person in payload(self.db, "asset_people", []) or []:
-            amount = (person.get("total") or {}).get(field)
-            if (
-                isinstance(amount, bool)
-                or not isinstance(amount, (int, float))
-                or not math.isfinite(amount)
-            ):
+        if people is None:
+            people = payload(self.db, "asset_people", []) or []
+        for person in people:
+            amount = (
+                asset_category_amount(person, category)
+                if category
+                else (person.get("total") or {}).get(field)
+            )
+            if not asset_number(amount):
                 continue
             if party and (person.get("party") or "미기재") != party:
                 continue
@@ -173,14 +224,36 @@ class Dashboard(Repository):
         spending, _, _ = self.member_rows(scope, party=party)
         for row in spending:
             row["value"] = row["amount"]
-        assets = self.asset_rows()
+        people = payload(self.db, "asset_people", []) or []
+        assets = self.asset_rows(people=people)
         by_party = defaultdict(list)
         for row in assets:
             by_party[row["party"] or "미기재"].append(row)
         asset_scope = self.asset_scope()
         return {
             "spending": ranked(scope, spending, "members"),
-            "assets": ranked(asset_scope, self.asset_rows(party), "assets"),
+            "assets": ranked(
+                asset_scope, self.asset_rows(party, people=people), "assets"
+            ),
+            "assetCategories": [
+                {
+                    "id": category,
+                    "label": label,
+                    **ranked(
+                        {
+                            **asset_scope,
+                            "label": (asset_scope["start"] or "기준일 미기재")
+                            + " "
+                            + label
+                            + " 신고액",
+                            "note": "신고대상 가족 포함, 고지거부 재산 제외. " + note,
+                        },
+                        self.asset_rows(party, category=category, people=people),
+                        "assets",
+                    ),
+                }
+                for category, (label, note) in ASSET_CATEGORIES.items()
+            ],
             "politicalIncome": self.political_income_rankings(scope, party),
             "partyAssets": [
                 {"party": name, **ranked(asset_scope, rows, "assets")}

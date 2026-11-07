@@ -73,3 +73,74 @@ def test_missing_asset_and_income_sources_remain_unavailable(client):
 
 def test_unknown_member_ranking_report_is_rejected(client):
     assert client.get("/api/v1/member-rankings?report=unknown").status_code == 400
+
+
+def test_realestate_rankings_exclude_leases_without_subtracting_debt(
+    asset_category_config,
+):
+    api = TestClient(create_app(asset_category_config))
+    data = api.get("/api/v1/member-rankings").json()
+    estate = data["assetCategories"][0]
+    assert estate["id"] == "realestate"
+    assert estate["n"] == 4
+    assert estate["total"] == 1300
+    assert estate["median"] == 250
+    assert [(row["name"], row["value"]) for row in estate["rows"]] == [
+        ("가상가", 800), ("정청래", 400), ("재산신고인01", 100), ("0원 재산", 0),
+    ]
+    assert estate["scope"]["start"] == "2025-12-31"
+    assert "전세·임차권을 제외" in estate["scope"]["note"]
+    assert "채무는 차감하지 않습니다" in estate["scope"]["note"]
+    assert estate["rows"][2]["id"] is None
+    assert estate["rows"][2]["page"] == 2
+
+
+def test_categories_use_their_own_values_and_keep_zero_without_missing_values(
+    asset_category_config,
+):
+    api = TestClient(create_app(asset_category_config))
+    data = api.get("/api/v1/member-rankings").json()
+    boards = {board["id"]: board for board in data["assetCategories"]}
+    securities = boards["securities"]
+    assert securities["label"] == "증권(주식 등)"
+    assert securities["n"] == 5
+    assert securities["median"] == 1000
+    assert securities["total"] == 6100
+    assert [row["value"] for row in securities["rows"]] == [3000, 2000, 1000, 100, 0]
+    assert securities["rows"][0]["name"] == "미수집 재산"
+    assert securities["rows"][0]["name"] not in {
+        row["name"] for row in data["assets"]["rows"]
+    }
+    assert boards["deposits"]["n"] == 4
+    assert boards["deposits"]["total"] == 900
+    assert boards["crypto"]["n"] == 3
+    assert boards["crypto"]["median"] == 0
+    assert boards["crypto"]["rows"][0]["ratioToMedian"] is None
+
+
+def test_category_rankings_follow_party_filter_and_ignore_accounting_year(
+    asset_category_config,
+):
+    api = TestClient(create_app(asset_category_config))
+    data = api.get(
+        "/api/v1/member-rankings", params={"party": "국민의힘", "report": "ka:2023"}
+    ).json()
+    for board, value in zip(data["assetCategories"], [800, 2000, 200, 0], strict=True):
+        assert board["n"] == 1
+        assert board["rows"][0]["name"] == "가상가"
+        assert board["rows"][0]["value"] == value
+        assert board["target"] == "assets"
+        assert board["scope"]["start"] == "2025-12-31"
+    empty = api.get("/api/v1/member-rankings", params={"party": "없는정당"}).json()
+    assert all(board["n"] == 0 for board in empty["assetCategories"])
+
+
+def test_category_missing_data_is_not_invented_as_zero(ranking_config):
+    api = TestClient(create_app(ranking_config))
+    data = api.get("/api/v1/member-rankings").json()
+    assert len(data["assetCategories"]) == 4
+    for board in data["assetCategories"]:
+        assert board["n"] == 0
+        assert board["rows"] == []
+        assert board["median"] is None
+        assert board["total"] is None
