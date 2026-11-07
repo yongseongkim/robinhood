@@ -181,13 +181,15 @@ export function Tabs({
   items,
   value,
   onChange,
+  label,
 }: {
   items: { value: string; label: string }[];
   value: string;
   onChange: (value: string) => void;
+  label?: string;
 }) {
   return (
-    <div className="tabs" role="tablist">
+    <div className="tabs" role="tablist" aria-label={label}>
       {items.map((item, index) => (
         <button
           key={item.value}
@@ -610,7 +612,22 @@ export function reportDates(params: URLSearchParams) {
   const last = new Date(year, number, 0).getDate();
   return { start: month + "-01", end: month + "-" + last };
 }
-export function ReportControls({ params }: { params: URLSearchParams }) {
+export function shortReportLabel(id: string, title: string) {
+  const labels: Record<string, string> = {
+    "ka:2024-22": "2024 · 22대",
+    "ka:2024-21": "2024 · 21대",
+    "ka:2023": "2023 · 21대",
+  };
+  return labels[id] || title;
+}
+
+export function ReportControls({
+  params,
+  compact = false,
+}: {
+  params: URLSearchParams;
+  compact?: boolean;
+}) {
   const meta = useMeta();
   const report = params.get("report") || "ka:2024-22";
   const year = report.includes("2023") ? "2023" : "2024";
@@ -621,8 +638,9 @@ export function ReportControls({ params }: { params: URLSearchParams }) {
         value={report}
         options={meta.reports.map((r) => ({
           value: r.id,
-          label:
-            r.id === "ka:2024-22"
+          label: compact
+            ? shortReportLabel(r.id, r.title)
+            : r.id === "ka:2024-22"
               ? "2024년 제22대 보고분"
               : r.id === "ka:2024-21"
                 ? "2024년 제21대 보고분"
@@ -634,7 +652,10 @@ export function ReportControls({ params }: { params: URLSearchParams }) {
         label="집계 월"
         value={params.get("month") || ""}
         options={[
-          { value: "", label: "선택 보고분 전체 기간" },
+          {
+            value: "",
+            label: compact ? "보고분 전체 기간" : "선택 보고분 전체 기간",
+          },
           ...Array.from({ length: 12 }, (_, i) => ({
             value: year + "-" + String(i + 1).padStart(2, "0"),
             label: year + "년 " + (i + 1) + "월",
