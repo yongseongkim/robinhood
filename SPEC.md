@@ -4,6 +4,8 @@ Project name: `robinhood`. Public service name: 나랏일보고서.
 
 This document records product requirements and design decisions. Data counts and design examples describe collection snapshots; current runtime behavior and support are defined by source code and tests. Setup belongs in docs/INSTALL.md, and deployment operations in deploy/README.md.
 
+Runtime names use the original public-source names for people and merchants. Private individual payees and sole-proprietor registration numbers remain masked. Retained wireframe example labels do not define runtime naming.
+
 Related files:
 
 - [README.md](README.md): service purpose, system overview and source summary.
@@ -69,7 +71,7 @@ What it is not. It is not a verdict machine, a "bad politicians" ranking or a ne
 | R16 | Let users judge. Build Top 10 boards for National Assembly members and local council members, places they commonly use, who spends the most, and other statistics. | Done (순위판) |
 | R17 | Filter payments far above normal prices. Prompted by news of 이준석 의원 pointing out price gaps. | Done, using each shop's usual price per person. Market-price comparison is not possible (§8.5). |
 | R18 | Asset rankings, asset composition, and the location and value of real estate. | Done for National Assembly members; local council members open |
-| R19 | Review of an external UX critique. Points adopted: entry by my area; menu cut to 5; funding badge on every amount; rankings as comparisons with context; fictional or human-reviewed home example; separate budget tabs; member-page tabs; rules in a few groups; lighter mobile. Fixed during that review: source-format label and README counts. | Implemented in the new web; names are pseudonymous by default and amounts come from the collected dataset. |
+| R19 | Review of an external UX critique. Points adopted: entry by my area; menu cut to 5; funding badge on every amount; rankings as comparisons with context; fictional or human-reviewed home example; separate budget tabs; member-page tabs; rules in a few groups; lighter mobile. Fixed during that review: source-format label and README counts. | Implemented in the new web; names and amounts come from the collected dataset. |
 | R20 | A data list with purposes for design work, and an English service description. | Done (this file) |
 | R21 | robinhood is the project name only; the public service needs a different name. | Selected: 나랏일보고서. The project remains robinhood. Trademark and domain checks remain open. |
 | R22 | Update the Pencil design (`robinhood.pen`) with these requirements. | Done |

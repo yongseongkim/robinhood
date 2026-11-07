@@ -397,9 +397,7 @@ export function Sources() {
       )}
       <SourceNote>
         빠진 값은 미기재·미수집으로 표시합니다. 원자료, 추정 분류, 계산 지표와
-        검토 상태를 구분합니다.{" "}
-        {meta.pseudonyms &&
-          "이 화면의 인물·가게 이름은 가명이며 원문에는 원래 표기가 남아 있습니다."}
+        검토 상태를 구분합니다.
       </SourceNote>
     </div>
   );

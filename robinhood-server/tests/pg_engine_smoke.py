@@ -78,7 +78,8 @@ with tempfile.TemporaryDirectory() as d:
     schema = "\n".join(
         p.read_text()
         for p in sorted(
-            (ROOT / "robinhood-server/src/robinhood_server/migrations").glob("*.sql")
+            (ROOT / "robinhood-server/src/robinhood_server/migrations").rglob("*.sql"),
+            key=lambda p: p.name,
         )
     )
     engine.request(
@@ -87,11 +88,12 @@ with tempfile.TemporaryDirectory() as d:
     )
     with sqlite3.connect(cfg.database) as staging:
         for table in TABLES:
+            columns = [r[1] for r in staging.execute(f"PRAGMA table_info({table})")]
             for row in staging.execute("SELECT * FROM " + table):
                 engine.execute(
                     "INSERT INTO "
                     + table
-                    + " VALUES ("
+                    + " (" + ",".join(columns) + ") VALUES ("
                     + ",".join("?" for _ in row)
                     + ")",
                     row,
@@ -108,7 +110,7 @@ with tempfile.TemporaryDirectory() as d:
             "/api/health",
             "/api/v1/meta",
             "/api/v1/members",
-            "/api/v1/members?q=김나래",
+            "/api/v1/members?q=정청래",
             "/api/v1/members?party=더불어민주당",
             "/api/v1/members?region=서울%20마포구",
             "/api/v1/subjects/na-279",

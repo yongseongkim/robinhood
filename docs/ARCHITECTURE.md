@@ -28,7 +28,7 @@ normalized + findings -> legacy build (optional) -> site/data
 
 worker는 DB의 `job_schedule`을 30초마다 확인합니다. 성공 완료 후 24시간, 실패 시 1·5·15분의 최대 세 차례 재시도, 이후 다음 정규 주기를 적용합니다. 재시작 시 저장된 일정을 복원합니다. 외부 CronJob은 `run-due`를 호출할 수 있습니다. 실행 이력은 `job_runs`에 저장하며 API에서 조회할 수 있고 공개 작업 시작 API는 없습니다. Linux systemd 서비스 설정은 준비돼 있지만 운영 연결/활성화는 수행하지 않았습니다.
 
-웹 개발 시 Vite가 `/api`를 프록시하고 운영 빌드는 API가 정적 파일과 SPA fallback으로 제공합니다. 응답 `scope`는 재원·시작·종료일과 보고분·월·연간·기준일을 명시하며 재원은 합산하지 않고 결측 금액은 null입니다. 가명은 표시 계층의 선택이고 원본은 보존합니다. NAVER Maps에는 공개 키 ID와 구별 대표 좌표를 사용합니다. 가게 정확 좌표·Geocoding·Toss 플랫폼 연동은 별도 범위입니다.
+웹 개발 시 Vite가 `/api`를 프록시하고 운영 빌드는 API가 정적 파일과 SPA fallback으로 제공합니다. 응답 `scope`는 재원·시작·종료일과 보고분·월·연간·기준일을 명시하며 재원은 합산하지 않고 결측 금액은 null입니다. 인물·상호는 원자료의 이름을 사용하고 개인 수령인·개인사업자 번호는 마스킹합니다. NAVER Maps에는 공개 키 ID와 구별 대표 좌표를 사용합니다. 가게 정확 좌표·Geocoding·Toss 플랫폼 연동은 별도 범위입니다.
 
 전체 수집기의 지원 연도·첨부 캐시·인증키·macOS OCR 조건은 [서버 안내](../robinhood-server/README.md)에 명시했습니다. 배치 성공을 모든 출처가 최신이라는 보장으로 쓰지 않습니다. 운영 권한과 실행 방법은 [배포 안내](../deploy/README.md)에 있습니다.
 

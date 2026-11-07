@@ -300,7 +300,6 @@ export type Ranking = {
 };
 export type Meta = {
   serviceName: string;
-  pseudonyms: boolean;
   indexedAt: string;
   counts: Record<string, number>;
   fundingTypes: Record<string, { label: string; description: string }>;

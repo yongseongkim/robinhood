@@ -63,11 +63,11 @@ def main():
         page.get_by_label('정당', exact=True).select_option('더불어민주당')
         expect(page.locator('.metrics')).to_contain_text('171명')
         page.get_by_label('정당', exact=True).select_option('')
-        page.get_by_role('textbox').fill('김나래')
+        page.get_by_role('textbox').fill('정청래')
         page.get_by_role('button', name='검색', exact=True).click()
         expect(page.locator('tbody tr')).to_have_count(1)
-        page.get_by_role('link', name='김나래', exact=True).click()
-        expect(page.get_by_role('heading', name='김나래', exact=True)).to_be_visible()
+        page.get_by_role('link', name='정청래', exact=True).click()
+        expect(page.get_by_role('heading', name='정청래', exact=True)).to_be_visible()
         for tab in ['정치자금', '신고재산', '법안·표결', '출처']:
             page.get_by_role('tab', name=tab, exact=True).click()
             expect(page.get_by_role('tab', name=tab, exact=True)).to_have_attribute('aria-selected', 'true')
@@ -87,9 +87,9 @@ def main():
         expect(page.locator('.scope-bar')).to_contain_text('의정운영공통경비')
 
         visit('/places', '자주 결제한 장소')
-        expect(page.get_by_role('heading', name='여의도밥상', exact=True)).to_be_visible()
+        expect(page.get_by_role('heading', name='가시리', exact=True)).to_be_visible()
         capture('places-desktop')
-        page.get_by_role('link').filter(has=page.get_by_role('heading', name='여의도밥상', exact=True)).click()
+        page.get_by_role('link').filter(has=page.get_by_role('heading', name='가시리', exact=True)).click()
         expect(page.locator('.metrics')).to_contain_text('424건')
         capture('place-detail-desktop')
         page.get_by_role('tab', name='의회 경비', exact=True).click()
@@ -116,7 +116,7 @@ def main():
         page.set_viewport_size({'width': 390, 'height': 844})
         for path, title, name in [('/', '우리 지역의 기록을 한눈에', 'home-mobile'),
                                    ('/places', '자주 결제한 장소', 'places-mobile'),
-                                   ('/members/na-279', '김나래', 'profile-mobile'),
+                                   ('/members/na-279', '정청래', 'profile-mobile'),
                                    ('/fiscal', '나라 살림', 'fiscal-mobile')]:
             visit(path, title)
             expect(page.locator('.scope-bar').first).to_be_visible()

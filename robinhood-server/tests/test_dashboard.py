@@ -36,12 +36,12 @@ def test_periods_and_missing_months():
     assert months[1]["amount"] == 0 and months[1]["hasRecords"]
 
 
-def test_funding_duplicates_refunds_and_aliases(client):
+def test_funding_duplicates_refunds_and_source_names(client):
     page = client.get("/api/v1/members").json()
     assert page["summary"]["amount"] == 12000
     assert page["summary"]["count"] == 4
     assert page["summary"]["payments"] == 2
-    assert page["rows"][0]["name"] == "김나래"
+    assert page["rows"][0]["name"] == "정청래"
     assert page["monthly"][0]["amount"] is None
     local = client.get("/api/v1/councils/mapo").json()
     assert local["summary"]["amount"] == 30000
@@ -81,13 +81,37 @@ def test_invalid_requests(client, url, status):
     assert client.get(url).status_code == status
 
 
-def test_search_is_literal_and_reading_original_names_is_opt_in(client, config):
+def test_source_names_search_findings_and_private_payees(client):
     assert client.get("/api/v1/members?q=%25").json()["total"] == 0
-    original = TestClient(create_app(replace(config, pseudonyms=False)))
-    assert original.get("/api/v1/members").json()["rows"][0]["name"] == "정청래"
-    observed = client.get("/api/v1/findings").json()["rows"][0]["observed"]
+    assert client.get("/api/v1/members?q=정청래").json()["total"] == 1
+    place = client.get("/api/v1/places?q=가시리").json()["rows"][0]
+    assert place["name"] == "가시리"
+    merchant = client.get("/api/v1/places/" + place["id"]).json()["merchant"]
+    assert merchant["aliases"] == ["가시리(여의도점)", "가시리 여의도점"]
+    assert merchant["businessNumber"] == "107-16-*****"
+    subject = client.get("/api/v1/subjects/mapo-role").json()["subject"]
+    assert subject["holders"][0]["name"] == "백남환"
+    finding = client.get("/api/v1/findings").json()["rows"][0]
+    assert finding["explanation"] == "가시리 확인"
+    observed = finding["observed"]
     assert observed["merchantId"] == public_merchant_id("b1071638735")
-    assert "가시리" not in json.dumps(observed, ensure_ascii=False)
+    assert observed["merchantName"] == observed["payee"] == "가시리"
+    private = client.get("/api/v1/transactions/private").json()
+    assert private["payee"] == "개인(비공개)"
+    assert "홍길동" not in json.dumps(private, ensure_ascii=False)
+
+
+def test_metadata_and_index_have_no_display_name_fields(client, config):
+    import sqlite3
+
+    assert "pseudonyms" not in client.get("/api/v1/meta").json()
+    with sqlite3.connect(config.database) as db:
+        for table in ["subjects", "merchants"]:
+            columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+            assert not columns & {"display_name", "display_aliases"}
+        assert not db.execute(
+            "SELECT 1 FROM metadata WHERE key='people_aliases'"
+        ).fetchone()
 
 
 def test_failed_rebuild_and_collector_keep_published_database(config):
@@ -187,7 +211,7 @@ def test_real_collection_reconciles_with_design_snapshot(real_api):
     assert mapo["summary"]["amount"] == 107890640 and mapo["summary"]["count"] == 916
     assert mapo["summary"]["months"] == 12
     place = real_api.get("/api/v1/places/" + public_merchant_id("b1071638735")).json()
-    assert place["merchant"]["name"] == "여의도밥상"
+    assert place["merchant"]["name"] == "가시리"
     assert (
         place["summary"]["payments"] == 424 and place["summary"]["amount"] == 79713893
     )
