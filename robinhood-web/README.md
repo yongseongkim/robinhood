@@ -14,6 +14,12 @@
 
 `/fiscal`의 ‘얼마나 달라졌나’는 총지출 또는 수집 부처 예산 합계, 분야·부처별 금액의 연도별 추세와 전년 대비 증감액·증감률·비중 변화를 보여줍니다. 연도와 항목 선택은 URL에 남고, 차트의 원 단위 금액을 표로 펼칠 수 있습니다. 연도 선택지는 API에 실제로 수집된 자료를 따릅니다. 결산은 연간 자료가 완성된 최신 연도를 기본으로 보여주며, 정부안은 전년도 확정 예산과 편성 규모를 비교한다고 표시합니다. 전년 자료 누락·부처명 변경·0원 기준액에서는 계산할 수 없는 증감률을 채우지 않습니다.
 
+## 방문 통계
+
+`index.html`에서 운영 hostname `robinhood.yongseongkimm.com`에만 Google Analytics 4(`G-C7KL1XNX65`)를 비동기로 로드합니다. 로컬·다른 미리보기 hostname은 수집하지 않습니다. 측정 ID는 공개 식별자이며 로그인 정보나 API secret은 쓰지 않습니다.
+
+페이지 조회는 Google 태그와 [브라우저 이력 기반 향상된 측정](https://developers.google.com/analytics/devguides/collection/ga4/single-page-applications)이 처리합니다. 데이터 스트림의 향상된 측정에서 `Page views → Page changes based on browser history events`를 켭니다. 라우터에 별도 `page_view` 전송을 추가하지 않으므로 초기 진입과 화면 전환이 중복 집계되지 않습니다. 태그 로딩이 막혀도 웹·API 조회는 계속 동작합니다.
+
 ## 네이버 지도
 
 서버의 `NAVER_MAPS_CLIENT_ID`에 현재 Maps 애플리케이션의 공개 키 ID를 설정하고 실제 웹 서비스 URL을 등록합니다. 서버가 이 값을 `/meta`로 전달하고 웹은 `ncpKeyId` 방식으로 SDK를 불러옵니다. 클라이언트 시크릿과 Geocoding 키는 웹에 넣지 않습니다. SDK 인증·로딩이 실패하거나 키가 없으면 실제 행정구역 경계 지도로 전환합니다.
