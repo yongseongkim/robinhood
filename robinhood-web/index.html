@@ -9,6 +9,20 @@
       content="우리 지역의 정치자금, 의회 경비, 장소 기록과 나라 살림을 출처와 함께 확인합니다."
     />
     <title>나랏일보고서</title>
+    <script>
+      if (window.location.hostname === "robinhood.yongseongkimm.com") {
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function () {
+          window.dataLayer.push(arguments);
+        };
+        window.gtag("js", new Date());
+        window.gtag("config", "G-C7KL1XNX65");
+        const tag = document.createElement("script");
+        tag.async = true;
+        tag.src = "https://www.googletagmanager.com/gtag/js?id=G-C7KL1XNX65";
+        document.head.appendChild(tag);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -502,6 +502,19 @@ select {
   font-weight: 600;
   white-space: nowrap;
 }
+.member-ranking-value small {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--soft);
+  font-weight: 400;
+}
+.party-wealth-ranking table {
+  min-width: 0;
+}
+.party-wealth-ranking th,
+.party-wealth-ranking td {
+  padding: 12px 8px;
+}
 .member-ranking-summary {
   display: flex;
   justify-content: space-between;
