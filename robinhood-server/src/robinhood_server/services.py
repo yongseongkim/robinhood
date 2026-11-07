@@ -1,5 +1,6 @@
 from collections import defaultdict
 from calendar import monthrange
+from datetime import date
 import json
 import math
 from statistics import median
@@ -24,6 +25,10 @@ ASSET_CATEGORIES = {
         "공보의 예금 소계이며 별도 항목인 정치자금 계좌는 포함하지 않습니다.",
     ),
     "crypto": ("가상자산", "공보의 가상자산 소계이며 신고 기준일의 신고가액입니다."),
+    "land": ("토지", "토지 소계에서 전세·임차권을 제외한 신고액이며 채무는 차감하지 않습니다."),
+    "buildings": ("건물", "건물 소계에서 전세·임차권을 제외한 신고액이며 채무는 차감하지 않습니다."),
+    "debt": ("채무", "공보의 채무 소계 자체를 비교합니다. 총재산 순위에서는 차감되는 금액입니다."),
+    "cash": ("현금", "공보의 현금 소계이며 예금과 별도인 신고 항목입니다."),
 }
 
 
@@ -37,11 +42,15 @@ def asset_number(value):
 
 def asset_category_amount(person, category):
     cats = person.get("cats") or {}
-    if category != "realestate":
-        name = {"securities": "증권", "deposits": "예금", "crypto": "가상자산"}[category]
+    if category not in ("realestate", "land", "buildings"):
+        name = {
+            "securities": "증권", "deposits": "예금", "crypto": "가상자산",
+            "debt": "채무", "cash": "현금",
+        }[category]
         return (cats.get(name) or {}).get("cur")
+    names = {"land": ("토지",), "buildings": ("건물",)}.get(category, ("토지", "건물"))
     amounts = [
-        (cats[name] or {}).get("cur") for name in ("토지", "건물") if name in cats
+        (cats[name] or {}).get("cur") for name in names if name in cats
     ]
     estate = person.get("realestate")
     if (
@@ -49,9 +58,13 @@ def asset_category_amount(person, category):
         or not all(asset_number(amount) for amount in amounts)
         or not isinstance(estate, list)
         or any(not isinstance(row.get("lease"), bool) for row in estate)
+        or category != "realestate" and any(row.get("cat") not in ("토지", "건물") for row in estate)
     ):
         return None
-    leases = [row.get("cur") for row in estate if row["lease"]]
+    leases = [
+        row.get("cur") for row in estate
+        if row["lease"] and (category == "realestate" or row["cat"] in names)
+    ]
     if not all(asset_number(amount) for amount in leases):
         return None
     # 임차권 금액을 알 수 없거나 소계보다 크면 소유 부동산으로 오인하지 않는다.
@@ -220,6 +233,82 @@ class Dashboard(Repository):
         rows.sort(key=lambda row: (-row["value"], row["name"], row["id"] or ""))
         return rows
 
+    def asset_change_scope(self):
+        scope = self.asset_scope()
+        try:
+            basis = date.fromisoformat(scope["end"])
+            if (basis.month, basis.day) != (12, 31):
+                raise ValueError("Annual comparison requires year-end values")
+            year = basis.year
+        except ValueError:
+            year = None
+        return {
+            **scope,
+            "kind": "annual_change",
+            "label": f"{year}년 신고 순재산 증감 ({year - 1}년 말 → {year}년 말)"
+            if year else "연간 비교 기준일 미기재",
+            "start": f"{year}-01-01" if year else "",
+            "year": year,
+            "note": "공보의 전년 말 대비 순재산 증감액으로 신고대상 가족을 포함하고 고지거부 재산은 제외합니다. 가액 변동 등이 포함되며 개인 연간 소득으로 계산하지 않습니다.",
+        }
+
+    def asset_changes(self, people, party):
+        scope = self.asset_change_scope()
+        rows = self.asset_rows(party, "change", people=people) if scope["year"] else []
+        gains = [row for row in rows if row["value"] > 0]
+        losses = sorted(
+            (row for row in rows if row["value"] < 0),
+            key=lambda row: (row["value"], row["name"], row["id"] or ""),
+        )
+        return {
+            "year": scope["year"],
+            "increases": ranked(scope, gains, "assets", "change"),
+            "decreases": ranked(scope, losses, "assets", "change"),
+        }
+
+    def asset_concentration(self, people, party, scope):
+        boards = []
+        for category, label in [("realestate", "부동산 비중"), ("securities", "증권 비중")]:
+            rows = []
+            for person in people:
+                candidates = self.asset_rows(party, category=category, people=[person])
+                if not candidates:
+                    continue
+                row = candidates[0]
+                net = (person.get("total") or {}).get("cur")
+                cats = person.get("cats") or {}
+                debt = (cats.get("채무") or {}).get("cur")
+                # 전체 항목 검증을 통과한 공보에서 채무 항목이 없으면 신고 채무가 없는 경우다.
+                if "채무" not in cats and person.get("checked") is True:
+                    debt = 0
+                if not asset_number(net) or not asset_number(debt) or debt < 0:
+                    continue
+                gross = net + debt
+                if not asset_number(gross) or gross <= 0 or not 0 <= row["amount"] <= gross:
+                    continue
+                rows.append({**row, "value": row["amount"] / gross, "grossAssets": gross})
+            rows.sort(key=lambda row: (-row["value"], row["name"], row["id"] or ""))
+            board = ranked(
+                {
+                    **scope, "unit": "ratio",
+                    "label": (scope["start"] or "기준일 미기재") + " " + label,
+                    "note": "해당 신고액 ÷ 총자산(순재산 + 채무)입니다. 신고대상 가족을 포함하고 고지거부 재산은 제외합니다. 부동산 분자에서는 전세·임차권을 제외하고 증권에는 주식 외 증권도 포함합니다.",
+                }, rows, "assets", "share",
+            )
+            boards.append({"id": category, "label": label, **board, "total": None})
+        return boards
+
+    def party_wealth(self, by_party, scope):
+        rows = [
+            {"party": party, "n": len(rows), "median": median(row["value"] for row in rows)}
+            for party, rows in by_party.items()
+        ]
+        rows.sort(key=lambda row: (-row["median"], row["party"]))
+        return {
+            "scope": scope,
+            "rows": [{**row, "rank": i + 1} for i, row in enumerate(rows)],
+        }
+
     def member_rankings(self, scope, party=""):
         spending, _, _ = self.member_rows(scope, party=party)
         for row in spending:
@@ -255,6 +344,9 @@ class Dashboard(Repository):
                 for category, (label, note) in ASSET_CATEGORIES.items()
             ],
             "politicalIncome": self.political_income_rankings(scope, party),
+            "assetChanges": self.asset_changes(people, party),
+            "assetConcentration": self.asset_concentration(people, party, asset_scope),
+            "partyWealth": self.party_wealth(by_party, asset_scope),
             "partyAssets": [
                 {"party": name, **ranked(asset_scope, rows, "assets")}
                 for name, rows in sorted(
@@ -321,7 +413,9 @@ class Dashboard(Repository):
     def rankings(self, scope, target="members", metric="amount", party="", category=""):
         if target == "assets":
             rows = self.asset_rows(party, metric)
-            scope = self.asset_scope()
+            scope = self.asset_change_scope() if metric == "change" else self.asset_scope()
+            if metric == "change" and not scope["year"]:
+                rows = []
             chart = []
         elif target == "councils":
             rows = [

@@ -293,6 +293,7 @@ export type Ranking = {
     months?: number;
     rank: number;
     page?: number;
+    grossAssets?: number;
     ratioToMedian?: number;
   }[];
   categories: Category[];
@@ -303,6 +304,12 @@ export type MemberRankings = {
   spending: Ranking;
   assets: Ranking;
   assetCategories: (Ranking & { id: string; label: string })[];
+  assetChanges: { year: number | null; increases: Ranking; decreases: Ranking };
+  assetConcentration: (Ranking & { id: string; label: string })[];
+  partyWealth: {
+    scope: Scope;
+    rows: { party: string; n: number; median: number; rank: number }[];
+  };
   politicalIncome: Ranking;
   partyAssets: (Ranking & { party: string })[];
   assetSource: Partial<AssetSource>;

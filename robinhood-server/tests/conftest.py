@@ -283,3 +283,39 @@ def asset_category_config(ranking_config):
     path.write_text(json.dumps(data, ensure_ascii=False))
     build_index(ranking_config)
     return ranking_config
+
+
+@pytest.fixture
+def extended_asset_config(ranking_config):
+    path = ranking_config.data / "assets.json"
+    data = json.loads(path.read_text())
+    data["people"] = []
+    for name, sid, party, net, change, cats, estate, checked in [
+        ("정청래", "na-279", "더불어민주당", 800, 100,
+         {"토지": 100, "건물": 500, "증권": 100, "예금": 300, "채무": 200, "현금": 0},
+         [("토지", 100, False), ("건물", 300, False), ("건물", 200, True)], True),
+        ("가상가", "na-800", "국민의힘", 100, -300,
+         {"토지": 200, "건물": 0, "증권": 600, "예금": 160, "채무": 900, "현금": 40},
+         [("토지", 200, False)], True),
+        ("무채무신고", None, "무소속", 300, 200,
+         {"건물": 100, "증권": 200, "현금": 0}, [("건물", 100, False)], True),
+        ("미확인채무", None, "더불어민주당", 100, None,
+         {"건물": 50, "증권": 30, "채무": None, "현금": None}, [("건물", 50, False)], False),
+        ("0총자산", None, "국민의힘", -50, 0,
+         {"토지": 0, "건물": 0, "증권": 0, "현금": 0, "채무": 50}, [], True),
+        ("순재산누락", None, "무소속", None, None,
+         {"증권": 500, "채무": 0, "현금": 50}, [], False),
+        ("큰감소", None, None, -100, -500,
+         {"예금": 400, "채무": 500}, [], True),
+    ]:
+        data["people"].append({
+            "name": name, "sid": sid, "party": party, "page": len(data["people"]) + 1,
+            "total": {"cur": net, "change": change,
+                      "prev": net - change if net is not None and change is not None else None},
+            "cats": {key: {"cur": value} for key, value in cats.items()},
+            "realestate": [{"cat": cat, "cur": cur, "lease": lease} for cat, cur, lease in estate],
+            "checked": checked,
+        })
+    path.write_text(json.dumps(data, ensure_ascii=False))
+    build_index(ranking_config)
+    return ranking_config

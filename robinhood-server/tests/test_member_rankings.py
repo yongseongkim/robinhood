@@ -1,6 +1,9 @@
 from fastapi.testclient import TestClient
+import json
+import pytest
 
 from robinhood_server.app import create_app
+from robinhood_server.index import build_index
 
 
 def test_member_rankings_keep_independent_reporting_scopes(ranking_config):
@@ -125,10 +128,13 @@ def test_category_rankings_follow_party_filter_and_ignore_accounting_year(
     data = api.get(
         "/api/v1/member-rankings", params={"party": "국민의힘", "report": "ka:2023"}
     ).json()
-    for board, value in zip(data["assetCategories"], [800, 2000, 200, 0], strict=True):
+    expected = {"realestate": 800, "securities": 2000, "deposits": 200, "crypto": 0}
+    for board in data["assetCategories"]:
+        if board["id"] not in expected:
+            continue
         assert board["n"] == 1
         assert board["rows"][0]["name"] == "가상가"
-        assert board["rows"][0]["value"] == value
+        assert board["rows"][0]["value"] == expected[board["id"]]
         assert board["target"] == "assets"
         assert board["scope"]["start"] == "2025-12-31"
     empty = api.get("/api/v1/member-rankings", params={"party": "없는정당"}).json()
@@ -138,9 +144,81 @@ def test_category_rankings_follow_party_filter_and_ignore_accounting_year(
 def test_category_missing_data_is_not_invented_as_zero(ranking_config):
     api = TestClient(create_app(ranking_config))
     data = api.get("/api/v1/member-rankings").json()
-    assert len(data["assetCategories"]) == 4
+    assert len(data["assetCategories"]) == 8
     for board in data["assetCategories"]:
         assert board["n"] == 0
         assert board["rows"] == []
         assert board["median"] is None
         assert board["total"] is None
+
+
+def test_debt_cash_and_separate_property_categories(extended_asset_config):
+    data = TestClient(create_app(extended_asset_config)).get("/api/v1/member-rankings").json()
+    boards = {board["id"]: board for board in data["assetCategories"]}
+    assert [(row["name"], row["value"]) for row in boards["debt"]["rows"]] == [
+        ("가상가", 900), ("큰감소", 500), ("정청래", 200), ("0총자산", 50), ("순재산누락", 0),
+    ]
+    assert boards["cash"]["rows"][0]["name"] == "순재산누락"
+    assert boards["cash"]["n"] == 5
+    assert boards["land"]["n"] == 3
+    assert boards["land"]["rows"][0]["value"] == 200
+    assert boards["buildings"]["rows"][0]["name"] == "정청래"
+    assert boards["buildings"]["rows"][0]["value"] == 300
+
+
+def test_annual_increases_and_decreases_keep_sign_and_period(extended_asset_config):
+    api = TestClient(create_app(extended_asset_config))
+    data = api.get("/api/v1/member-rankings?report=ka:2023").json()["assetChanges"]
+    assert data["year"] == 2025
+    assert data["increases"]["scope"]["start"] == "2025-01-01"
+    assert data["increases"]["scope"]["end"] == "2025-12-31"
+    assert "2024년 말 → 2025년 말" in data["increases"]["scope"]["label"]
+    assert [row["value"] for row in data["increases"]["rows"]] == [200, 100]
+    assert [row["value"] for row in data["decreases"]["rows"]] == [-500, -300]
+    assert data["decreases"]["median"] == -400
+    assert data["decreases"]["rows"][0]["ratioToMedian"] is None
+    filtered = api.get("/api/v1/member-rankings?party=국민의힘").json()["assetChanges"]
+    assert filtered["increases"]["n"] == 0
+    assert filtered["decreases"]["rows"][0]["name"] == "가상가"
+    old = api.get("/api/v1/rankings?target=assets&metric=change").json()
+    assert old["scope"]["kind"] == "annual_change"
+
+
+def test_concentration_uses_gross_assets_not_net_and_does_not_invent_debt(
+    extended_asset_config,
+):
+    data = TestClient(create_app(extended_asset_config)).get("/api/v1/member-rankings").json()
+    property_board, securities = data["assetConcentration"]
+    assert property_board["n"] == securities["n"] == 3
+    assert property_board["total"] is None
+    assert securities["total"] is None
+    assert property_board["scope"]["unit"] == "ratio"
+    assert [row["name"] for row in property_board["rows"]] == ["정청래", "무채무신고", "가상가"]
+    assert property_board["rows"][0]["value"] == 0.4
+    assert property_board["rows"][0]["amount"] == 400
+    assert property_board["rows"][0]["grossAssets"] == 1000
+    assert securities["rows"][0]["name"] == "무채무신고"
+    assert securities["rows"][0]["value"] == pytest.approx(2 / 3)
+    assert securities["median"] == 0.6
+    assert {row["name"] for row in securities["rows"]}.isdisjoint({"미확인채무", "0총자산", "순재산누락"})
+
+
+def test_party_median_ranking_uses_all_members_and_remains_global(extended_asset_config):
+    api = TestClient(create_app(extended_asset_config))
+    data = api.get("/api/v1/member-rankings").json()["partyWealth"]
+    assert [(row["party"], row["median"], row["n"]) for row in data["rows"]] == [
+        ("더불어민주당", 450, 2), ("무소속", 300, 1), ("국민의힘", 25, 2), ("미기재", -100, 1),
+    ]
+    assert [row["rank"] for row in data["rows"]] == [1, 2, 3, 4]
+    assert api.get("/api/v1/member-rankings?party=국민의힘").json()["partyWealth"] == data
+
+
+def test_unknown_disclosure_year_does_not_fabricate_annual_ranking(extended_asset_config):
+    path = extended_asset_config.data / "assets.json"
+    data = json.loads(path.read_text())
+    data["source"].pop("basis")
+    path.write_text(json.dumps(data, ensure_ascii=False))
+    build_index(extended_asset_config)
+    changes = TestClient(create_app(extended_asset_config)).get("/api/v1/member-rankings").json()["assetChanges"]
+    assert changes["year"] is None
+    assert changes["increases"]["n"] == changes["decreases"]["n"] == 0

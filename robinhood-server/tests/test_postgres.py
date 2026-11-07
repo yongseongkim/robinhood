@@ -173,11 +173,11 @@ def test_postgres_api_contract_and_repeatable_reads(pg_config):
 
 
 def test_member_rankings_match_sqlite_after_postgres_publication(
-    pg_config, asset_category_config
+    pg_config, extended_asset_config
 ):
     build_index(pg_config)
     postgres_api = TestClient(create_app(pg_config))
-    sqlite_api = TestClient(create_app(asset_category_config))
+    sqlite_api = TestClient(create_app(extended_asset_config))
     for params in [{}, {"party": "없는정당"}, {"party": "국민의힘"}]:
         response = postgres_api.get("/api/v1/member-rankings", params=params)
         assert response.status_code == 200
