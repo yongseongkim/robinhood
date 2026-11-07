@@ -2,6 +2,7 @@ from dataclasses import replace
 from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
+import json
 import os
 import sqlite3
 import uuid
@@ -136,6 +137,48 @@ def test_postgres_failed_copy_rolls_back(pg_config, config, tmp_path):
         publish(pg_config, bad)
     with connect(pg_config) as conn:
         assert conn.execute("SELECT COUNT(*) n FROM transactions").fetchone()[0] == 8
+
+
+def test_postgres_council_findings_preserve_scope_and_subject_integrity(pg_config):
+    path = pg_config.data / "findings.json"
+    findings = json.loads(path.read_text())
+    council_finding = {
+        "id": "council-disclosure-gap",
+        "ruleId": "DISCLOSURE_GAP",
+        "subjectId": "org-mapo",
+        "sourceId": "mapo",
+        "fundingType": None,
+        "observed": {"missingMonths": ["2024-02"]},
+        "evidenceIds": [],
+    }
+    findings.append(council_finding)
+    path.write_text(json.dumps(findings))
+    build_index(pg_config)
+    build_index(pg_config)
+    api = TestClient(create_app(pg_config))
+    assert api.get("/api/health").status_code == 200
+    page = api.get("/api/v1/findings", params={"subjectId": "org-mapo"}).json()
+    assert page["total"] == 1
+    assert page["rows"][0]["subjectId"] == "org-mapo"
+    assert page["rows"][0]["observed"] == council_finding["observed"]
+    with connect(pg_config) as conn:
+        assert conn.execute(
+            "SELECT spending_subject_id FROM findings WHERE id='test-finding'"
+        ).fetchone()[0] == "na-279"
+
+    # 의회 scope 예외는 규칙과 출처가 모두 일치할 때만 적용한다.
+    for changes in [
+        {"ruleId": "OTHER_RULE"},
+        {"sourceId": "seoul"},
+        {"subjectId": "missing"},
+    ]:
+        path.write_text(json.dumps([*findings[:-1], {**council_finding, **changes}]))
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            build_index(pg_config)
+        assert api.get("/api/health").status_code == 200
+        assert api.get(
+            "/api/v1/findings", params={"subjectId": "org-mapo"}
+        ).json()["total"] == 1
 
 
 def test_postgres_cross_connection_exclusion_and_durable_schedule(pg_config):
