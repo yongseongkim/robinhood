@@ -1,4 +1,5 @@
 import { query, useMeta, useResource } from "../api";
+import type { ReactNode } from "react";
 import { changeFilters, href, Link, useLocation } from "../router";
 import { count, shortWon, won } from "../format";
 import {
@@ -17,36 +18,64 @@ import {
 } from "../components/ui";
 import type { MemberPage } from "../types";
 import { MemberRankings } from "../components/MemberRankings";
+import type { RankingView } from "../components/MemberRankings";
+
+const views: { value: RankingView | "list"; label: string }[] = [
+  { value: "assets", label: "재산 순위" },
+  { value: "changes", label: "연간 증감" },
+  { value: "funds", label: "정치자금" },
+  { value: "parties", label: "정당 비교" },
+  { value: "list", label: "의원 목록" },
+];
 
 export function Members() {
   const { params } = useLocation();
   const listRequested = ["q", "region", "sort", "page", "month"].some((key) =>
     params.has(key),
   );
-  const view = params.get("view") || (listRequested ? "list" : "rankings");
+  const requestedView = params.get("view");
+  const view =
+    views.find((item) => item.value === requestedView)?.value ||
+    (requestedView === "rankings"
+      ? "assets"
+      : listRequested
+        ? "list"
+        : "assets");
+  const navigation = (
+    <Tabs
+      label="의원·정당 보기"
+      value={view}
+      items={views}
+      onChange={(view) => {
+        changeFilters({ view, q: "", region: "", sort: "", month: "" });
+        window.scrollTo({ top: 0 });
+        requestAnimationFrame(() => {
+          document
+            .querySelector<HTMLButtonElement>(
+              '[aria-label="의원·정당 보기"] [aria-selected="true"]',
+            )
+            ?.focus({ preventScroll: true });
+        });
+      }}
+    />
+  );
   return (
     <div className="page stack members-page">
       <PageHeader
         title="의원·정당 찾아보기"
         context="의원과 정당"
-        description="의원별 지출·신고재산·정치자금 수입 순위와 정당별 재산 Top 10을 비교합니다."
+        description="재산·연간 증감·정치자금을 살펴보고 정당별 신고재산을 비교합니다."
       />
-      <Tabs
-        value={view}
-        items={[
-          { value: "rankings", label: "순위 한눈에" },
-          { value: "list", label: "의원 목록" },
-        ]}
-        onChange={(view) =>
-          changeFilters({ view, q: "", region: "", sort: "", month: "" })
-        }
-      />
-      {view === "list" ? <MemberList /> : <MemberRankings />}
+      {view === "list" ? (
+        <MemberList navigation={navigation} />
+      ) : (
+        <MemberRankings view={view} navigation={navigation} />
+      )}
     </div>
   );
 }
 
-function MemberList() {
+function MemberList({ navigation }: { navigation: ReactNode }) {
   const { params } = useLocation();
   const meta = useMeta();
   const report = params.get("report") || "ka:2024-22",
@@ -67,39 +96,42 @@ function MemberList() {
   const data = resource.data;
   return (
     <>
-      <div className="filters">
-        <SearchForm
-          value={q}
-          placeholder="의원 이름 또는 지역구 검색"
-          onSearch={(q) => changeFilters({ q })}
-        />
-        <Select
-          label="정당"
-          value={party}
-          options={[
-            { value: "", label: "정당 · 전체" },
-            ...meta.parties.map((p) => ({ value: p, label: p })),
-          ]}
-          onChange={(party) => changeFilters({ party })}
-        />
-        <ReportControls params={params} />
-        <Select
-          label="목록 정렬"
-          value={sort}
-          options={[
-            { value: "name", label: "이름순" },
-            { value: "amount", label: "지출 많은 순" },
-          ]}
-          onChange={(sort) => changeFilters({ sort })}
-        />
-        {region && (
-          <button
-            className="chip"
-            onClick={() => changeFilters({ region: "" })}
-          >
-            {region} ×
-          </button>
-        )}
+      <div className="members-toolbar members-list-toolbar">
+        {navigation}
+        <div className="filters">
+          <SearchForm
+            value={q}
+            placeholder="의원 이름 또는 지역구 검색"
+            onSearch={(q) => changeFilters({ q })}
+          />
+          <Select
+            label="정당"
+            value={party}
+            options={[
+              { value: "", label: "정당 · 전체" },
+              ...meta.parties.map((p) => ({ value: p, label: p })),
+            ]}
+            onChange={(party) => changeFilters({ party })}
+          />
+          <ReportControls params={params} compact />
+          <Select
+            label="목록 정렬"
+            value={sort}
+            options={[
+              { value: "name", label: "이름순" },
+              { value: "amount", label: "지출 많은 순" },
+            ]}
+            onChange={(sort) => changeFilters({ sort })}
+          />
+          {region && (
+            <button
+              className="chip"
+              onClick={() => changeFilters({ region: "" })}
+            >
+              {region} ×
+            </button>
+          )}
+        </div>
       </div>
       {!data ? (
         <ResourceState {...resource} />
