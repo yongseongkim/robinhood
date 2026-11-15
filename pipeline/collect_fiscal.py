@@ -20,6 +20,7 @@ from datetime import datetime, timezone, timedelta
 import requests
 
 import credentials
+import fiscal_annual
 from common import NORMALIZED, RAW, ROOT
 
 BASE = "https://openapi.openfiscaldata.go.kr/"
@@ -258,12 +259,20 @@ def normalize(manifest):
             a["through_month"] = min(a["through_month"], int(last.get("OJ_M") or 0))
             for k, f in fields.items():
                 a[k] = won(last.get(f), JO)
+    # 연간 결산으로 바꿀 때 11월 누계의 세부 항목을 연간 구성처럼 섞지 않는다.
+    for settlement in fiscal_annual.settlements():
+        year = str(settlement["year"])
+        if actual.get(year, {}).get("through_month") == 12:
+            continue
+        actual[year] = {"through_month": 12, **settlement["values"], "source": settlement["source"],
+                        "national_tax": None, "non_tax": None, "fund_revenue": None,
+                        "budget_expenditure": None, "fund_expenditure": None}
     for y, a in actual.items():
         if y in debt and a.get("through_month") == 12:
             debt[y]["managed_balance"] = a.get("managed_balance")
             debt[y]["integrated_balance"] = a.get("integrated_balance")
     out["debt"] = {"basis": "국가채무(D1) 연말 기준, 재정수지는 월간 재정동향 12월 누계", "years": debt}
-    out["actuals"] = {"basis": "월간 재정동향 누계(집행 실적). through_month가 12가 아니면 그해 해당 월까지 누계", "years": actual}
+    out["actuals"] = {"basis": "월간 재정동향 누계 및 공식 연간 국가결산. through_month가 12가 아니면 그해 해당 월까지 누계", "years": actual}
 
     notes += [
         "예산과 결산은 다르다: 재정수입구조는 본예산, 16대 분야·국세수입·중앙관서별은 연도마다 예산 또는 결산(basis 참고), 월별 총수입·총지출은 실제 집행 누계다.",
@@ -279,6 +288,7 @@ def normalize(manifest):
 
 
 def main():
+    fiscal_annual.collect()
     try:
         key = credentials.get("openfiscal_api_key")
     except credentials.MissingCredential as e:
