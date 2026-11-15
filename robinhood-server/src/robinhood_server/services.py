@@ -104,7 +104,7 @@ class Dashboard(Repository):
 
     def council_years(self):
         return [int(row[0]) for row in self.db.execute(
-            "SELECT DISTINCT SUBSTR(date,1,4) FROM transactions WHERE source!='ka-money' AND valid_period=1 AND duplicate_of IS NULL AND date IS NOT NULL ORDER BY 1 DESC"
+            "SELECT DISTINCT SUBSTR(CAST(date AS TEXT),1,4) FROM transactions WHERE source!='ka-money' AND valid_period=1 AND duplicate_of IS NULL AND date IS NOT NULL ORDER BY 1 DESC"
         )]
 
     def latest_council_year(self):
@@ -649,7 +649,7 @@ class Dashboard(Repository):
             "selectedYear": year,
             "availableYears": available,
             "values": values,
-            "source": fiscal.get("source"),
+            "source": (values or {}).get("source") or fiscal.get("source"),
             "sectors": sector,
             "ministries": ministry,
             "revenue": section("revenue"),

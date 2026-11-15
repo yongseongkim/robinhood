@@ -211,14 +211,22 @@ export function Fiscal() {
                   title="총수입은 어디서 왔나"
                   description={year + "년 연간 집행 실적 · 동일 통계의 구성"}
                 >
-                  <Bars
-                    rows={[
-                      { name: "국세", amount: values.national_tax },
-                      { name: "세외수입", amount: values.non_tax },
-                      { name: "기금수입", amount: values.fund_revenue },
-                    ]}
-                    total={values.total_revenue}
-                  />
+                  {values.national_tax !== null &&
+                  values.non_tax !== null &&
+                  values.fund_revenue !== null ? (
+                    <Bars
+                      rows={[
+                        { name: "국세", amount: values.national_tax },
+                        { name: "세외수입", amount: values.non_tax },
+                        { name: "기금수입", amount: values.fund_revenue },
+                      ]}
+                      total={values.total_revenue}
+                    />
+                  ) : (
+                    <Empty>
+                      연간 결산의 수입 구성은 아직 수집되지 않았습니다.
+                    </Empty>
+                  )}
                 </Panel>
                 <Panel
                   title="어디에 썼나 · 분야별"

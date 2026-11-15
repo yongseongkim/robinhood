@@ -154,3 +154,22 @@ def test_api_uses_latest_complete_actual_and_collected_budget_years(
     assert proposal["trends"]["series"][0]["previous"]["basis"] == "budget"
     assert client.get("/api/v1/fiscal?basis=budget&year=2024").status_code == 404
     assert client.get("/api/v1/fiscal?basis=unknown").status_code == 422
+
+
+def test_latest_annual_settlement_uses_its_own_source(client, config, fiscal):
+    source = {"name": "한국재정정보원 국가결산", "url": "https://www.fis.kr/report"}
+    fiscal["actuals"]["years"]["2025"] = {
+        "through_month": 12, "total_revenue": 637_400_000_000_000,
+        "total_expenditure": 684_100_000_000_000,
+        "integrated_balance": -46_700_000_000_000, "managed_balance": -104_200_000_000_000,
+        "national_tax": None, "non_tax": None, "fund_revenue": None, "source": source,
+    }
+    with sqlite3.connect(config.database) as db:
+        db.execute("INSERT OR REPLACE INTO metadata VALUES('fiscal',?)", (json.dumps(fiscal),))
+    response = client.get('/api/v1/fiscal')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['selectedYear'] == 2025
+    assert data['source'] == source
+    assert data['values']['total_expenditure'] == 684_100_000_000_000
+    assert data['values']['national_tax'] is None
