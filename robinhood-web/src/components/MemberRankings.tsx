@@ -155,7 +155,7 @@ export function MemberRankings({
 }) {
   const { params } = useLocation();
   const meta = useMeta();
-  const report = params.get("report") || "ka:2024-22";
+  const report = params.get("report") || meta.reports[0]?.id || "ka:2024-22";
   const party = params.get("party") || "";
   const resource = useResource<RankingsData>(
     "member-rankings?" +

@@ -23,7 +23,7 @@ export function Councils() {
   const meta = useMeta();
   const { params } = useLocation();
   const council = params.get("council") || "mapo",
-    year = params.get("year") || "2024",
+    year = params.get("year") || String(meta.councilYears[0]),
     funding = params.get("fundingType") || "COUNCIL_OPERATION";
   const resource = useResource<Council>(
     "councils/" +
@@ -55,9 +55,9 @@ export function Councils() {
         <Select
           label="집계 연도"
           value={year}
-          options={Array.from({ length: 9 }, (_, i) => ({
-            value: String(2026 - i),
-            label: 2026 - i + "년",
+          options={meta.councilYears.map((y) => ({
+            value: String(y),
+            label: y + "년",
           }))}
           onChange={(year) => changeFilters({ year })}
         />

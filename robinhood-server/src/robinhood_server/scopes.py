@@ -1,7 +1,7 @@
 from calendar import monthrange
 from datetime import date
 
-REPORTS = {"ka:2023": (2023, "제21대"), "ka:2024-21": (2024, "제21대"), "ka:2024-22": (2024, "제22대")}
+REPORTS = {"ka:2023": (2023, "제21대"), "ka:2024-21": (2024, "제21대"), "ka:2024-22": (2024, "제22대"), "ka:2025-22": (2025, "제22대")}
 FUNDS = {"POLITICAL_FUND", "COUNCIL_OPERATION", "COUNCIL_COMMON", "INSTITUTION_OPERATION", "POLICY_PROMOTION", "DEPARTMENT_OPERATION", "NEGOTIATION_GROUP", "OTHER_COUNCIL"}
 
 

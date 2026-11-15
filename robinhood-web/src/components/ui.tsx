@@ -614,6 +614,7 @@ export function reportDates(params: URLSearchParams) {
 }
 export function shortReportLabel(id: string, title: string) {
   const labels: Record<string, string> = {
+    "ka:2025-22": "2025 · 22대",
     "ka:2024-22": "2024 · 22대",
     "ka:2024-21": "2024 · 21대",
     "ka:2023": "2023 · 21대",
@@ -629,8 +630,8 @@ export function ReportControls({
   compact?: boolean;
 }) {
   const meta = useMeta();
-  const report = params.get("report") || "ka:2024-22";
-  const year = report.includes("2023") ? "2023" : "2024";
+  const report = params.get("report") || meta.reports[0]?.id || "ka:2024-22";
+  const year = report.slice(3, 7);
   return (
     <>
       <Select
@@ -638,13 +639,7 @@ export function ReportControls({
         value={report}
         options={meta.reports.map((r) => ({
           value: r.id,
-          label: compact
-            ? shortReportLabel(r.id, r.title)
-            : r.id === "ka:2024-22"
-              ? "2024년 제22대 보고분"
-              : r.id === "ka:2024-21"
-                ? "2024년 제21대 보고분"
-                : "2023년 제21대 보고분",
+          label: compact ? shortReportLabel(r.id, r.title) : r.title,
         }))}
         onChange={(report) => changeFilters({ report, month: "" })}
       />

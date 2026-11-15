@@ -323,6 +323,7 @@ export type Meta = {
   councils: CouncilItem[];
   parties: string[];
   reports: { id: string; title: string; period: string }[];
+  councilYears: number[];
   documents: number;
   merchants: number;
   naverMapsClientId: string;
