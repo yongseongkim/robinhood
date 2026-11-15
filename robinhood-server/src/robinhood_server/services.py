@@ -3,7 +3,7 @@ from calendar import monthrange
 from datetime import date
 import json
 import math
-from statistics import median
+from statistics import mean, median
 
 from .db import escaped_like, payload, records
 from .fiscal import available_years, build_trends, sections
@@ -315,7 +315,8 @@ class Dashboard(Repository):
 
     def party_wealth(self, by_party, scope):
         rows = [
-            {"party": party, "n": len(rows), "median": median(row["value"] for row in rows)}
+            {"party": party, "n": len(rows), "median": median(row["value"] for row in rows),
+             "mean": mean(row["value"] for row in rows)}
             for party, rows in by_party.items()
         ]
         rows.sort(key=lambda row: (-row["median"], row["party"]))
