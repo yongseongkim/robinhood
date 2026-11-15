@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Utensils } from "lucide-react";
-import { query, useResource } from "../api";
+import { query, useMeta, useResource } from "../api";
 import { changeFilters, href, Link, useLocation } from "../router";
 import { confidence, count, shortWon, won } from "../format";
 import { PlaceMap } from "../components/maps";
@@ -29,25 +29,27 @@ import type {
   PlaceDetail as PlaceDetailData,
   Places as PlacesData,
   Scope,
+  Meta,
 } from "../types";
 
 function periodLabel(scope: Scope) {
-  if (scope.start === "2023-01-01" && scope.end === "2024-12-31")
-    return "2년 합계";
+  if (scope.start.slice(0, 4) !== scope.end.slice(0, 4)) return "기간 합계";
   return scope.kind === "annual"
     ? "연간 합계"
     : scope.kind === "monthly"
       ? "월 합계"
       : "기간 합계";
 }
-function placeFilters(params: URLSearchParams) {
+function placeFilters(params: URLSearchParams, meta: Meta) {
   const funding = params.get("fundingType") || "POLITICAL_FUND";
+  const year =
+    funding === "POLITICAL_FUND"
+      ? meta.reports[0]?.id.slice(3, 7)
+      : String(meta.councilYears[0]);
   return {
     funding,
-    start:
-      params.get("start") ||
-      (funding === "POLITICAL_FUND" ? "2023-01-01" : "2024-01-01"),
-    end: params.get("end") || "2024-12-31",
+    start: params.get("start") || year + "-01-01",
+    end: params.get("end") || year + "-12-31",
   };
 }
 function FundingTabs({ funding }: { funding: string }) {
@@ -61,8 +63,8 @@ function FundingTabs({ funding }: { funding: string }) {
       onChange={(fundingType) =>
         changeFilters({
           fundingType,
-          start: fundingType === "POLITICAL_FUND" ? "2023-01-01" : "2024-01-01",
-          end: "2024-12-31",
+          start: "",
+          end: "",
           page: "",
         })
       }
@@ -115,7 +117,7 @@ function useNarrow() {
 }
 export function Places() {
   const { params } = useLocation();
-  const { funding, start, end } = placeFilters(params);
+  const { funding, start, end } = placeFilters(params, useMeta());
   const narrow = useNarrow();
   const region = params.get("region") || "서울 영등포구",
     q = params.get("q") || "",
@@ -260,7 +262,7 @@ export function Places() {
             </Panel>
             <Panel title="기간을 맞춰 확인">
               <p className="caption">
-                정치자금 2023–2024 합계와 의회 경비 2024 합계를 구분합니다.
+                정치자금과 의회 경비는 각 최신 수집 연도를 기본으로 표시합니다.
               </p>
               <Link className="text-link" href="/sources">
                 집계 기준 확인 →
@@ -280,7 +282,7 @@ export function Places() {
 
 export function PlaceDetail({ id }: { id: string }) {
   const { params } = useLocation();
-  const { funding, start, end } = placeFilters(params);
+  const { funding, start, end } = placeFilters(params, useMeta());
   const resource = useResource<PlaceDetailData>(
     "places/" +
       encodeURIComponent(id) +
@@ -293,7 +295,7 @@ export function PlaceDetail({ id }: { id: string }) {
       }),
   );
   const data = resource.data;
-  const [chartYear, setChartYear] = useState("2024"),
+  const [chartYear, setChartYear] = useState(end.slice(0, 4)),
     [allPayers, setAllPayers] = useState(false);
   useEffect(() => {
     if (data) setChartYear(data.scope.end.slice(0, 4));

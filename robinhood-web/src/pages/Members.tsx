@@ -78,7 +78,7 @@ export function Members() {
 function MemberList({ navigation }: { navigation: ReactNode }) {
   const { params } = useLocation();
   const meta = useMeta();
-  const report = params.get("report") || "ka:2024-22",
+  const report = params.get("report") || meta.reports[0]?.id || "ka:2024-22",
     party = params.get("party") || "",
     q = params.get("q") || "",
     region = params.get("region") || "",

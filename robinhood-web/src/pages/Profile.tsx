@@ -54,8 +54,8 @@ function DocumentCard({ id }: { id?: string }) {
 export function Profile({ id }: { id: string }) {
   const { params } = useLocation();
   const meta = useMeta();
-  const report = params.get("report") || "ka:2024-22",
-    year = params.get("year") || "2024",
+  const report = params.get("report") || meta.reports[0]?.id || "ka:2024-22",
+    year = params.get("year") || String(meta.councilYears[0]),
     funding = params.get("fundingType") || "COUNCIL_OPERATION";
   const resource = useResource<ProfileData>(
     "subjects/" +
@@ -116,9 +116,9 @@ export function Profile({ id }: { id: string }) {
             <Select
               label="집계 연도"
               value={year}
-              options={Array.from({ length: 9 }, (_, i) => ({
-                value: String(2026 - i),
-                label: 2026 - i + "년",
+              options={meta.councilYears.map((y) => ({
+                value: String(y),
+                label: y + "년",
               }))}
               onChange={(year) => changeFilters({ year })}
             />

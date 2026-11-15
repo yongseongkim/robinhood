@@ -89,6 +89,8 @@ KA_FILES = {  # 같은 대수는 나중 파일의 정당·지역구가 앞의 �
            "year": 2024, "period": ("2024-01-01", "2024-12-31"), "term_end": "2024-05-29"},
     "22": {"file": "2024_KAPF-22_income_expense.xlsx", "src_name": "2024_KAPF-22_수입지출.xlsx", "assembly": "제22대",
            "year": 2024, "period": ("2024-01-01", "2024-12-31"), "term_start": "2024-05-30"},
+    "25": {"file": "2025_KAPF_income_expense.xlsx", "src_name": "2025_KAPF_수입지출.xlsx", "assembly": "제22대",
+           "year": 2025, "period": ("2025-01-01", "2025-12-31"), "doc_id": "ka:2025-22", "expense_src": "2025_KAPF.xlsx"},
 }
 
 
@@ -155,7 +157,7 @@ ATTRIBUTION_NOTE = {
 KA_COLUMNS = {
     "seq": ("총연번", "연번"), "oid": ("의원번호",), "name": ("의원명",), "party": ("당",), "district": ("지역명",),
     "account": ("계정명",), "subject_kind": ("과목명",), "date": ("연월일",), "desc": ("내역", "내 역"),
-    "inc": ("수입금회", "수입"), "exp": ("지출금회", "지출", "지출액"), "payee": ("성명-법인단체명", "성명", "사용처"),
+    "inc": ("수입금회", "수입"), "exp": ("지출금회", "지출", "지출액"), "payee": ("성명-법인단체명", "성명법인단체명", "성명", "사용처"),
     "bizno": ("생년월일-사업자번호", "사업자번호"), "addr": ("주소-사무소소재지", "주소"), "biztype": ("직업-업종", "업종"),
     "receipt": ("영수증일련번호", "영수증"), "cat": ("분류",),
 }
@@ -176,6 +178,21 @@ def account_label(raw):
     return a
 
 
+def expense_categories(meta, manifest):
+    source = manifest.get(meta.get("expense_src"))
+    categories = defaultdict(set)
+    if source:
+        wb = openpyxl.load_workbook(ROOT / source["local_path"], read_only=True, data_only=True)
+        it = wb.worksheets[0].iter_rows(values_only=True)
+        header = next(it)
+        for values in it:
+            row = dict(zip(header, values))
+            key = (row.get("의원번호"), row.get("연월일"), to_int(row.get("지출액")), clean_text(row.get("사용처")))
+            categories[key].add(row.get("분류"))
+        wb.close()
+    return categories
+
+
 def load_ka():
     manifest = {m["filename"]: m for m in json.loads((RAW / "ka-money" / "manifest.json").read_text())}
     rows, subjects, documents = [], {}, []
@@ -185,7 +202,8 @@ def load_ka():
             print(f"  (skip KA-money {meta['src_name']}: not downloaded)", file=sys.stderr)
             continue
         m = manifest[meta["src_name"]]
-        doc_id = f"ka:{meta['year']}-{term}" if term != "23" else "ka:2023"
+        expense_cats = expense_categories(meta, manifest)
+        doc_id = meta.get("doc_id") or (f"ka:{meta['year']}-{term}" if term != "23" else "ka:2023")
         documents.append({
             "doc_id": doc_id, "source_id": "ka-money",
             "title": f"국회의원 정치자금 수입·지출 ({meta['year']}, {meta['assembly']} 회계보고분)",
@@ -194,6 +212,10 @@ def load_ka():
             "publisher": "오마이뉴스·경향신문·뉴스타파 (원자료: 중앙선관위 정치자금 수입·지출보고서, 정보공개청구)",
             "origin_note": "원본 PDF는 오마이뉴스 국회의원 정치자금 공개 페이지(https://omn.kr/187rv) 또는 뉴스타파 데이터포털에서 의원명으로 검색해 확인할 수 있습니다.",
         })
+        if meta.get("expense_src") in manifest:
+            source = manifest[meta["expense_src"]]
+            documents[-1]["related_sources"] = [{k: source[k] for k in ("github_url", "sha256", "filename")}]
+            documents[-1]["origin_note"] += " 지출액이 있으나 수입으로 분류된 환급은 별도 지출 공개본의 의원번호·날짜·금액·사용처가 모두 같은 행으로 분류를 확인합니다."
         wb = openpyxl.load_workbook(ROOT / m["local_path"], read_only=True, data_only=True)
         it = wb.worksheets[0].iter_rows(values_only=True)
         header = [re.sub(r"\s+", " ", str(h or "")).strip() for h in next(it)]
@@ -203,6 +225,9 @@ def load_ka():
                 if n in header:
                     col[key] = header.index(n)
                     break
+        missing = {"seq", "oid", "name", "date", "exp", "inc", "payee", "cat"} - col.keys()
+        if missing:
+            raise ValueError(f"KA-money {meta['src_name']}: missing columns {sorted(missing)}")
         g = lambda r, k: r[col[k]] if k in col and col[k] < len(r) else None
         for r in it:
             oid = g(r, "oid")
@@ -217,6 +242,12 @@ def load_ka():
             if term == "23":
                 in_2023.add(sid)
             cat, exp, inc = g(r, "cat"), g(r, "exp"), g(r, "inc")
+            # 2025 상세본의 음수 지출 5건은 수입으로 분류되어 별도 지출본과 대조한다.
+            if cat == "수입" and to_int(exp) is not None and to_int(exp) < 0 and to_int(inc) is None:
+                candidates = expense_cats.get((oid, g(r, "date"), to_int(exp), clean_text(g(r, "payee"))), set())
+                if len(candidates) != 1 or not next(iter(candidates)) or "수입" in candidates:
+                    raise ValueError(f"KA-money refund classification requires source verification: {g(r, 'seq')}")
+                cat = next(iter(candidates))
             if cat == "수입" or to_int(exp) is None:
                 if cat == "수입" and to_int(inc):
                     by_year = s.setdefault("income", {}).setdefault(str(meta["year"]), Counter())
@@ -228,6 +259,7 @@ def load_ka():
                 biztype=g(r, "biztype"), receipt=g(r, "receipt"), cat=cat, account=account_label(g(r, "account")),
                 doc_id=doc_id, period=meta["period"],
             ))
+        wb.close()
     # 2024년 상반기(제21대 회계) 파일에는 제22대 총선 예비후보자의 회계도 들어 있다.
     # 2023년(현직 의원만 수록) 자료가 없는 사람은 제21대 의원이 아니라 예비후보 기간 회계로 본다.
     if any(m.get("year") == 2023 for m in KA_FILES.values()) and in_2023:

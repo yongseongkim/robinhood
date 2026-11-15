@@ -30,6 +30,14 @@ export function Home() {
     : data.members.rows;
   const local = data.council;
   const city = data.cityCouncil;
+  const report = data.scope.reportId;
+  const reportLabel = data.scope.label;
+  const reportYear = data.scope.start.slice(0, 4);
+  const councilScope = local?.scope || city?.scope;
+  const councilYear = councilScope?.start.slice(0, 4);
+  const councilLabel = councilYear
+    ? councilYear + "년 수록 자료 합계"
+    : "의회 자료 미수집";
   const boundaries =
     province === "서울"
       ? geo?.seoulDistricts.filter((d) =>
@@ -84,7 +92,7 @@ export function Home() {
       <div className="scope-bar">
         <span>집계 기준</span>
         <span>
-          국회의원: 2024년 제22대 보고분 합계 · 의회 경비: 2024.01–12 연간 합계
+          국회의원: {reportLabel} · 의회 경비: {councilLabel}
         </span>
       </div>
       <div className="map-steps">
@@ -159,19 +167,19 @@ export function Home() {
           accent
           label="지역구 보고자"
           value={count(members.length) + "명"}
-          detail="2024년 제22대 정치자금 보고분"
+          detail={reportLabel}
         />
         <Stat
           label={local ? local.council.name + " 경비" : "지역 의회 경비"}
           value={shortWon(local?.summary.amount)}
           exact={local?.summary.amount}
-          detail="2024.01–12 · 의회운영업무추진비"
+          detail={councilLabel + " · 수록 자료 기준"}
         />
         <Stat
           label="서울시의회 경비"
           value={shortWon(city?.summary.amount)}
           exact={city?.summary.amount}
-          detail="2024.01–12 · 연간 합계"
+          detail={councilLabel + " · 수록 자료 기준"}
         />
         <Stat
           label="지자체 재정수지"
@@ -181,7 +189,7 @@ export function Home() {
       </div>
       <Section
         title="이 지역 국회의원"
-        description="2024년 제22대 보고분 합계 · 현재 소속과 다를 수 있습니다."
+        description={reportLabel + " · 현재 소속과 다를 수 있습니다."}
       >
         {members.length ? (
           <div className="person-grid">
@@ -195,11 +203,9 @@ export function Home() {
                   {shortWon(m.amount)}
                 </div>
                 <p className="caption">
-                  2024년 보고분 합계 · {count(m.count)}건
+                  {reportYear}년 보고분 합계 · {count(m.count)}건
                 </p>
-                <ButtonLink
-                  to={href("/members/" + m.id, { report: "ka:2024-22" })}
-                >
+                <ButtonLink to={href("/members/" + m.id, { report })}>
                   프로필 보기
                 </ButtonLink>
               </Panel>
@@ -215,7 +221,9 @@ export function Home() {
       <div className="two-columns">
         <Panel
           title="직책·반기별 지출 합계 Top 3"
-          description="2024년 · 역할과 재임 기간을 함께 확인합니다."
+          description={
+            councilYear + "년 · 수록 기간과 재임 기간을 함께 확인합니다."
+          }
         >
           {local?.roles.slice(0, 3).map((r, i) => (
             <div className="compact-rank" key={r.id}>
@@ -231,7 +239,7 @@ export function Home() {
                 className="numeric"
                 href={href("/members/" + r.id, {
                   fundingType: "COUNCIL_OPERATION",
-                  year: 2024,
+                  year: councilYear,
                 })}
               >
                 {shortWon(r.amount)}
