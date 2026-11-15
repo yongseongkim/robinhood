@@ -28,10 +28,12 @@ CMD ["robinhood", "serve", "--host", "0.0.0.0", "--port", "8000"]
 FROM runtime AS worker
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       chromium fonts-noto-cjk tesseract-ocr tesseract-ocr-kor tesseract-ocr-eng \
+       chromium fonts-noto-cjk libatomic1 tesseract-ocr tesseract-ocr-kor tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 COPY pipeline/requirements.txt /app/pipeline/requirements.txt
 RUN pip install --no-cache-dir -r /app/pipeline/requirements.txt
+# Playwright의 ARM64 Node 드라이버는 libatomic을 동적으로 읽는다.
+RUN python -c 'from playwright.sync_api import sync_playwright; p = sync_playwright().start(); p.stop()'
 COPY pipeline/ /app/pipeline/
 # 원본·지도 중간 결과·작업 로그를 하나의 영구 볼륨에 보관한다.
 RUN mkdir -p /app/site /storage \
