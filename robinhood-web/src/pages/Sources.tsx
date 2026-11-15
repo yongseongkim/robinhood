@@ -89,7 +89,12 @@ export function Sources() {
             <Stat
               label="정치자금 거래"
               value={count(data.counts.POLITICAL_FUND) + "건"}
-              detail="2023–2024 수집 자료"
+              detail={
+                meta.reports
+                  .map((r) => r.id.slice(3, 7))
+                  .filter((y, i, years) => years.indexOf(y) === i)
+                  .join(" · ") + " 수집 자료"
+              }
             />
             <Stat
               label="출처 문서"

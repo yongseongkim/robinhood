@@ -261,3 +261,35 @@ def test_real_findings_pagination_and_geo_precision(real_api):
     assert not {r["id"] for r in first["rows"]} & {r["id"] for r in second["rows"]}
     geo = real_api.get("/api/v1/geo").json()
     assert all("lat" in p and "lng" in p for p in geo["seoul"])
+
+
+def test_latest_published_periods_are_defaults_and_history_stays_selectable(config):
+    docs_path = config.data / "documents.json"
+    docs = json.loads(docs_path.read_text())
+    docs.append({"doc_id": "ka:2025-22", "source_id": "ka-money", "title": "2025 정치자금", "period": "2025"})
+    docs_path.write_text(json.dumps(docs))
+    path = config.data / "expenditures.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows.extend([
+        {**rows[0], "id": "ka25-1", "doc_id": "ka:2025-22", "date": "2025-04-01", "amount": 70000},
+        {**next(r for r in rows if r["id"] == "local"), "id": "local-2026", "date": "2026-10-01", "amount": 40000},
+    ])
+    path.write_text("\n".join(json.dumps(row) for row in rows))
+    build_index(config)
+    with TestClient(create_app(config)) as client:
+        meta = client.get("/api/v1/meta").json()
+        assert meta["reports"][0]["id"] == "ka:2025-22"
+        assert meta["councilYears"] == [2026, 2024]
+        for endpoint in ["members", "member-rankings", "rankings", "subjects/na-279", "overview"]:
+            response = client.get("/api/v1/" + endpoint)
+            assert response.status_code == 200, response.text
+            value = response.json()
+            scope = value["spending"]["scope"] if endpoint == "member-rankings" else value["scope"]
+            assert scope["reportId"] == "ka:2025-22"
+        assert client.get("/api/v1/members").json()["summary"]["amount"] == 70000
+        assert client.get("/api/v1/members?report=ka:2024-22").json()["summary"]["amount"] == 12000
+        assert client.get("/api/v1/councils/mapo").json()["scope"]["start"] == "2026-01-01"
+        assert client.get("/api/v1/councils/mapo?year=2024").json()["summary"]["amount"] == 30000
+        assert client.get("/api/v1/places").json()["scope"]["start"] == "2025-01-01"
+        assert client.get("/api/v1/places?fundingType=COUNCIL_OPERATION").json()["scope"]["start"] == "2026-01-01"
+        assert client.get("/api/v1/transactions").json()["scope"]["start"] == "2025-01-01"

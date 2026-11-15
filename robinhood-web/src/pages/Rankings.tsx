@@ -30,8 +30,8 @@ export function Rankings() {
   const party =
       params.get("party") ?? (target === "members" ? "더불어민주당" : "all"),
     category = params.get("category") || "";
-  const report = params.get("report") || "ka:2024-22",
-    year = params.get("year") || "2024";
+  const report = params.get("report") || meta.reports[0]?.id || "ka:2024-22",
+    year = params.get("year") || String(meta.councilYears[0]);
   const resource = useResource<Ranking>(
     "rankings?" +
       query({
@@ -101,8 +101,8 @@ export function Rankings() {
           <Select
             label="비교 연도"
             value={year}
-            options={["2024", "2023", "2025", "2026", "2022"].map((y) => ({
-              value: y,
+            options={meta.councilYears.map((y) => ({
+              value: String(y),
               label: y + "년",
             }))}
             onChange={(year) => changeFilters({ year })}

@@ -96,6 +96,20 @@ def ranked(scope, rows, target, metric="amount"):
 
 
 class Dashboard(Repository):
+    def reports(self):
+        return [report for report in sorted(REPORTS, reverse=True) if self.document(report)]
+
+    def latest_report(self):
+        return next(iter(self.reports()), "ka:2024-22")
+
+    def council_years(self):
+        return [int(row[0]) for row in self.db.execute(
+            "SELECT DISTINCT SUBSTR(date,1,4) FROM transactions WHERE source!='ka-money' AND valid_period=1 AND duplicate_of IS NULL AND date IS NOT NULL ORDER BY 1 DESC"
+        )]
+
+    def latest_council_year(self):
+        return next(iter(self.council_years()), date.today().year)
+
     def meta(self):
         parties = [
             r[0]
@@ -116,9 +130,10 @@ class Dashboard(Repository):
                     "title": self.document(d)["title"],
                     "period": self.document(d)["period"],
                 }
-                for d in ["ka:2024-22", "ka:2024-21", "ka:2023"]
+                for d in self.reports()
                 if self.document(d)
             ],
+            "councilYears": self.council_years(),
             "documents": self.db.execute("SELECT COUNT(*) FROM documents").fetchone()[
                 0
             ],

@@ -256,8 +256,9 @@ def collect(slug):
     out.mkdir(parents=True, exist_ok=True)
     mpath = out / "manifest.json"
     previous = {}
+    previous_posts = json.loads(mpath.read_text()) if mpath.exists() else []
     if mpath.exists():
-        for p in json.loads(mpath.read_text()):
+        for p in previous_posts:
             for a in p["attachments"]:
                 if a.get("sha256"):
                     previous[a["url"]] = a
@@ -316,7 +317,21 @@ def collect(slug):
             break
         page += 1
     f.close()
-    mpath.write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
+    # 일시적인 차단·목록 누락으로 이미 수집한 공개자료를 지우지 않는다.
+    retained = {p["post_url"]: p for p in previous_posts}
+    for post in manifest:
+        prior = retained.get(post["post_url"])
+        if prior:
+            attachments_by_url = {a["url"]: a for a in prior["attachments"]}
+            attachments_by_url.update({a["url"]: a for a in post["attachments"]})
+            post["attachments"] = list(attachments_by_url.values())
+        retained[post["post_url"]] = post
+    manifest = list(retained.values())
+    if not manifest:
+        raise RuntimeError(f"[{slug}] no source posts; refusing to publish an empty collection")
+    temporary = mpath.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
+    temporary.replace(mpath)
     n_att = sum(1 for p in manifest for a in p["attachments"] if a.get("sha256"))
     print(f"[{slug}] {len(manifest)} posts, {n_att} files", file=sys.stderr)
     return manifest

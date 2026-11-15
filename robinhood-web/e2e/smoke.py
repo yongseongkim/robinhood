@@ -45,6 +45,11 @@ def main():
                               content_type=response.headers.get('content-type', 'application/octet-stream'))
             page.route('**/*', serve)
 
+        metadata = api.get('/api/v1/meta').json() if api else context.request.get(base + '/api/v1/meta').json()
+        latest_report = metadata['reports'][0]['id']
+        latest_year = latest_report[3:7]
+        council_year = str(metadata['councilYears'][0])
+
         def visit(path, title):
             page.goto(base + path)
             expect(page.get_by_role('heading', name=title, exact=True).first).to_be_visible()
@@ -55,7 +60,7 @@ def main():
             page.screenshot(path=str(output / (name + '.png')), full_page=True)
 
         visit('/', '우리 지역의 기록을 한눈에')
-        expect(page.locator('main')).to_contain_text('2명')
+        expect(page.locator('.scope-bar')).to_contain_text(latest_year)
         capture('home-desktop')
         page.get_by_label('시·도', exact=True).select_option('부산')
         expect(page.locator('main')).to_contain_text('부산 국회의원 보고자료')
@@ -77,7 +82,7 @@ def main():
         expect(page.locator('.member-ranking-card')).to_have_count(1)
         page.get_by_role('tab', name='의원 목록', exact=True).click()
         page.get_by_label('정당', exact=True).select_option('더불어민주당')
-        expect(page.locator('.metrics')).to_contain_text('171명')
+        expect(page.locator('.scope-bar')).to_contain_text(latest_year)
         page.get_by_label('정당', exact=True).select_option('')
         page.get_by_role('textbox').fill('정청래')
         page.get_by_role('button', name='검색', exact=True).click()
@@ -89,27 +94,29 @@ def main():
             expect(page.get_by_role('tab', name=tab, exact=True)).to_have_attribute('aria-selected', 'true')
             assert len(page.locator('main').inner_text()) > 300
 
-        visit('/members?month=2024-06', '의원·정당 찾아보기')
+        visit('/members?report=ka:2024-22&month=2024-06', '의원·정당 찾아보기')
         expect(page.locator('.scope-bar')).to_contain_text('2024.06.01')
         visit('/rankings', '비교·랭킹')
-        expect(page.locator('.metrics')).to_contain_text('171')
+        expect(page.locator('.scope-bar')).to_contain_text(latest_year)
         page.get_by_role('tab', name='지방의회', exact=True).click()
         expect(page.locator('.scope-bar')).to_contain_text('의회운영업무추진비')
         page.get_by_role('tab', name='신고재산', exact=True).click()
         expect(page.locator('.scope-bar')).to_contain_text('2025-12-31')
         visit('/councils', '지방의회 · 직책 경비')
-        expect(page.locator('.metrics')).to_contain_text('916')
+        expect(page.locator('.scope-bar')).to_contain_text(council_year)
         page.get_by_label('경비 재원').select_option('COUNCIL_COMMON')
         expect(page.locator('.scope-bar')).to_contain_text('의정운영공통경비')
 
         visit('/places', '자주 결제한 장소')
-        expect(page.get_by_role('heading', name='가시리', exact=True)).to_be_visible()
+        expect(page.locator('.place-card').first).to_be_visible()
+        expect(page.locator('.scope-bar')).to_contain_text(latest_year)
         capture('places-desktop')
-        page.get_by_role('link').filter(has=page.get_by_role('heading', name='가시리', exact=True)).click()
-        expect(page.locator('.metrics')).to_contain_text('424건')
+        page.locator('.place-card').first.click()
+        expect(page.locator('.scope-bar')).to_contain_text(latest_year)
         capture('place-detail-desktop')
         page.get_by_role('tab', name='의회 경비', exact=True).click()
-        expect(page.locator('.metrics')).to_contain_text('166,000원')
+        expect(page.locator('.scope-bar')).to_contain_text(council_year)
+        expect(page.locator('.scope-bar')).to_contain_text('의회운영업무추진비')
         visit('/transactions/ka22-24_163113', '거래 상세')
         expect(page.locator('main')).to_contain_text('취소·반환')
         expect(page.locator('main')).to_contain_text('90,000원')
