@@ -308,7 +308,13 @@ export type MemberRankings = {
   assetConcentration: (Ranking & { id: string; label: string })[];
   partyWealth: {
     scope: Scope;
-    rows: { party: string; n: number; median: number; rank: number }[];
+    rows: {
+      party: string;
+      n: number;
+      median: number;
+      mean: number;
+      rank: number;
+    }[];
   };
   politicalIncome: Ranking;
   partyAssets: (Ranking & { party: string })[];
