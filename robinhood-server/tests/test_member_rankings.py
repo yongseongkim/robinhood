@@ -222,3 +222,27 @@ def test_unknown_disclosure_year_does_not_fabricate_annual_ranking(extended_asse
     changes = TestClient(create_app(extended_asset_config)).get("/api/v1/member-rankings").json()["assetChanges"]
     assert changes["year"] is None
     assert changes["increases"]["n"] == changes["decreases"]["n"] == 0
+
+
+def test_party_mean_uses_all_valid_records_including_zero_and_negative(ranking_config):
+    path = ranking_config.data / 'assets.json'
+    assets = json.loads(path.read_text())
+    amounts = [0, -100, *([100] * 9), 100000, None, False]
+    assets['people'] = [
+        {'name': f'신고인{i}', 'party': 'A정당', 'total': {'cur': amount}}
+        for i, amount in enumerate(amounts)
+    ] + [
+        {'name': '비교인1', 'party': 'B정당', 'total': {'cur': 2000}},
+        {'name': '비교인2', 'party': 'B정당', 'total': {'cur': 3000}},
+    ]
+    path.write_text(json.dumps(assets, ensure_ascii=False))
+    build_index(ranking_config)
+    api = TestClient(create_app(ranking_config))
+    data = api.get('/api/v1/member-rankings').json()
+    rows = data['partyWealth']['rows']
+    assert [(row['party'], row['median'], row['mean'], row['n'], row['rank']) for row in rows] == [
+        ('B정당', 2500, 2500, 2, 1), ('A정당', 100, 8400, 12, 2),
+    ]
+    group = next(group for group in data['partyAssets'] if group['party'] == 'A정당')
+    assert len(group['rows']) == 10 and group['n'] == 12
+    assert api.get('/api/v1/member-rankings?party=B정당').json()['partyWealth'] == data['partyWealth']

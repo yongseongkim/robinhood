@@ -410,15 +410,15 @@ export function MemberRankings({
               <div className="section-heading members-view-heading">
                 <h2>정당별 신고재산 비교</h2>
                 <p>
-                  중앙값은 전체 정당을 비교하고, Top 10은 선택한 정당 안에서
-                  비교합니다.
+                  전체 정당의 중앙값과 평균을 비교하고, Top 10은 선택한 정당
+                  안에서 비교합니다.
                 </p>
               </div>
               <div className="member-party-comparison">
                 <section className="panel member-party-medians">
-                  <h3>전체 정당 순재산 중앙값</h3>
+                  <h3>전체 정당 순재산 중앙값·평균</h3>
                   <p className="caption">
-                    공보에 수록된 인원 기준 · 정당을 선택하면 Top 10이 바뀝니다.
+                    공보 수록 인원 기준 · 중앙값이 높은 순서입니다.
                   </p>
                   {data.partyWealth.rows.length ? (
                     <div className="table-scroll party-wealth-ranking">
@@ -429,6 +429,7 @@ export function MemberRankings({
                             <th>정당</th>
                             <th className="numeric right">수록 인원</th>
                             <th className="numeric right">중앙값</th>
+                            <th className="numeric right">평균</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -468,14 +469,23 @@ export function MemberRankings({
                               >
                                 {shortWon(row.median)}
                               </td>
+                              <td
+                                className="numeric right"
+                                title={won(row.mean)}
+                              >
+                                {shortWon(row.mean)}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   ) : (
-                    <Empty>중앙값을 비교할 신고재산 자료가 없습니다.</Empty>
+                    <Empty>비교할 신고재산 자료가 없습니다.</Empty>
                   )}
+                  <p className="caption">
+                    평균은 정당별 순재산 합계를 수록 인원으로 나눈 값입니다.
+                  </p>
                 </section>
                 {selectedGroup ? (
                   <RankingBoard
@@ -492,8 +502,9 @@ export function MemberRankings({
                 )}
               </div>
               <AssetSource data={data}>
-                {data.assets.scope.note} 정당별 중앙값은 전체 수록 인원으로
-                계산합니다. 10명 미만인 정당은 수록된 인원만 표시합니다.
+                {data.assets.scope.note} 정당별 중앙값과 평균은 유효한 순재산이
+                수록된 전체 인원으로 계산합니다. 미수집은 제외하고 실제 0원과
+                음수는 포함합니다. 10명 미만인 정당은 수록된 인원만 표시합니다.
               </AssetSource>
             </>
           )}
