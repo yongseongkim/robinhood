@@ -649,7 +649,7 @@ class Dashboard(Repository):
             "selectedYear": year,
             "availableYears": available,
             "values": values,
-            "source": fiscal.get("source"),
+            "source": (values or {}).get("source") or fiscal.get("source"),
             "sectors": sector,
             "ministries": ministry,
             "revenue": section("revenue"),

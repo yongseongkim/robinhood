@@ -381,9 +381,9 @@ export type FiscalValues = {
   total_expenditure: number;
   integrated_balance: number;
   managed_balance: number;
-  national_tax: number;
-  non_tax: number;
-  fund_revenue: number;
+  national_tax: number | null;
+  non_tax: number | null;
+  fund_revenue: number | null;
   through_month: number;
 };
 export type Fiscal = {
