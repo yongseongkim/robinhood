@@ -1,5 +1,22 @@
 [
  {
+  "id": "PETI_ASSEMBLY_DISCLOSURES",
+  "name": "국회공직자윤리위원회 수시 재산공개",
+  "provider": "인사혁신처 공직윤리시스템 · 국회공보",
+  "url": "https://www.peti.go.kr/peOptpListVie.do",
+  "key_fields": ["성명", "직위", "등록기준일", "공개일", "국회공보 총계와 쪽수"],
+  "update_cycle": "수시",
+  "notes": "현직과 퇴직 의원의 공개목록을 공보의 총계와 대조한다. 정기신고 비교는 같은 기준일 자료로 집계한다."
+ },
+ {
+  "id": "ASSEMBLY22_LEGAL_DISTRICTS",
+  "provider": "법제처 국가법령정보센터",
+  "name": "공직선거법 별표 1 국회의원지역선거구구역표",
+  "url": "https://law.go.kr/LSW/flDownload.do?flSeq=163897897",
+  "period": "제22대 선거구 254개",
+  "notes": "선거구 구역표의 시군구와 읍면동명을 대조하며 행정구역이 변경된 곳은 경계 추정 여부를 표시한다."
+ },
+ {
   "id": "KA_MONEY",
   "name": "국회의원 정치자금 지출내역 데이터 (KA-money, 2012~2025)",
   "provider": "오마이뉴스 (2022~2025년분은 경향신문·뉴스타파 공동). 원천 자료는 중앙선거관리위원회 정치자금 수입지출보고서(정보공개청구)",

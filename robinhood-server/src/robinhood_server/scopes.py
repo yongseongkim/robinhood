@@ -1,7 +1,8 @@
 from calendar import monthrange
 from datetime import date
 
-REPORTS = {"ka:2023": (2023, "제21대"), "ka:2024-21": (2024, "제21대"), "ka:2024-22": (2024, "제22대"), "ka:2025-22": (2025, "제22대")}
+from .catalog import report_info
+
 FUNDS = {"POLITICAL_FUND", "COUNCIL_OPERATION", "COUNCIL_COMMON", "INSTITUTION_OPERATION", "POLICY_PROMOTION", "DEPARTMENT_OPERATION", "NEGOTIATION_GROUP", "OTHER_COUNCIL"}
 
 
@@ -11,10 +12,10 @@ def period(start: str, end: str, funding: str, report: str | None = None, **extr
         raise ValueError("시작일은 종료일보다 늦을 수 없습니다.")
     if funding not in FUNDS:
         raise ValueError("지원하지 않는 재원입니다.")
-    if report and (report not in REPORTS or funding != "POLITICAL_FUND"):
+    if report and (not report_info(report) or funding != "POLITICAL_FUND"):
         raise ValueError("정치자금 보고서를 확인해 주세요.")
     if report:
-        year, term = REPORTS[report]
+        year, term = report_info(report)
         if s.year != year or e.year != year:
             raise ValueError("선택한 보고연도 안에서 기간을 지정해 주세요.")
         kind = "report"
@@ -31,9 +32,9 @@ def period(start: str, end: str, funding: str, report: str | None = None, **extr
 
 
 def report_period(report="ka:2024-22", start=None, end=None):
-    if report not in REPORTS:
+    if not report_info(report):
         raise ValueError("지원하지 않는 보고서입니다.")
-    year = REPORTS[report][0]
+    year = report_info(report)[0]
     return period(start or f"{year}-01-01", end or f"{year}-12-31", "POLITICAL_FUND", report)
 
 

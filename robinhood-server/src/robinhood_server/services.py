@@ -8,7 +8,7 @@ from statistics import mean, median
 from .db import escaped_like, payload, records
 from .fiscal import available_years, build_trends, sections
 from .repository import NotFound, Repository
-from .scopes import REPORTS
+from .catalog import report_info
 
 
 ASSET_CATEGORIES = {
@@ -96,12 +96,6 @@ def ranked(scope, rows, target, metric="amount"):
 
 
 class Dashboard(Repository):
-    def reports(self):
-        return [report for report in sorted(REPORTS, reverse=True) if self.document(report)]
-
-    def latest_report(self):
-        return next(iter(self.reports()), "ka:2024-22")
-
     def council_years(self):
         return [int(row[0]) for row in self.db.execute(
             "SELECT DISTINCT SUBSTR(CAST(date AS TEXT),1,4) FROM transactions WHERE source!='ka-money' AND valid_period=1 AND duplicate_of IS NULL AND date IS NOT NULL ORDER BY 1 DESC"
@@ -124,15 +118,7 @@ class Dashboard(Repository):
             "fundingTypes": payload(self.db, "funding", {}),
             "councils": list(payload(self.db, "registry", {}).values()),
             "parties": parties,
-            "reports": [
-                {
-                    "id": d,
-                    "title": self.document(d)["title"],
-                    "period": self.document(d)["period"],
-                }
-                for d in self.reports()
-                if self.document(d)
-            ],
+            "reports": self.reports(),
             "councilYears": self.council_years(),
             "documents": self.db.execute("SELECT COUNT(*) FROM documents").fetchone()[
                 0
@@ -143,6 +129,7 @@ class Dashboard(Repository):
             "naverMapsClientId": self.config.naver_client_id,
             "locationPrecision": "시·군·구",
             "assembly": payload(self.db, "assembly_summary"),
+            "sourceChecks": payload(self.db, "sourceChecks", {}),
         }
 
     def councils(self, scope):
@@ -383,7 +370,7 @@ class Dashboard(Repository):
         }
 
     def political_income_rankings(self, report_scope, party=""):
-        year, term_name = REPORTS[report_scope["reportId"]]
+        year, term_name = report_info(report_scope["reportId"])
         rows = []
         for subject in records(
             self.db, "SELECT id,name,details FROM subjects WHERE type='LEGISLATOR'"
@@ -518,18 +505,19 @@ class Dashboard(Repository):
             "locationPrecision": "시·군·구",
         }
 
-    def place(self, mid, scope, page=1):
+    def place(self, mid, scope, page=1, meal_only=True):
         merchant = self.db.execute(
             "SELECT * FROM merchants WHERE id=?", (mid,)
         ).fetchone()
         if not merchant:
             raise NotFound("거래처를 찾을 수 없습니다.")
-        where, args = self.where(scope, "t.merchant_id=? AND t.is_meal=1", [mid])
-        agg = self.aggregates(scope, "t.merchant_id=? AND t.is_meal=1", [mid])
+        predicate = "t.merchant_id=?" + (" AND t.is_meal=1" if meal_only else "")
+        where, args = self.where(scope, predicate, [mid])
+        agg = self.aggregates(scope, predicate, [mid])
         payers = records(
             self.db,
             f"""SELECT t.subject_id id,SUM(t.amount) amount,SUM(t.retained_payment) payments
-            FROM transactions t WHERE {where} GROUP BY t.subject_id HAVING SUM(t.amount)>0
+            FROM transactions t WHERE {where} GROUP BY t.subject_id {"HAVING SUM(t.amount)>0" if meal_only else ""}
             ORDER BY payments DESC,amount DESC""",
             args,
         )
@@ -554,7 +542,7 @@ class Dashboard(Repository):
             "payers": payers,
             "refunds": refund_count,
             "transactions": self.transactions(
-                scope, merchant_id=mid, page=page, meal_only=True
+                scope, merchant_id=mid, page=page, meal_only=meal_only
             ),
             "locationPrecision": "시·군·구",
         }
@@ -570,6 +558,7 @@ class Dashboard(Repository):
             "region": region,
             "scope": report_scope,
             "members": members,
+            "roster": self.directory(region=region),
             "council": council_data,
             "cityCouncil": self.council("seoul", council_scope)
             if region.startswith("서울")
@@ -708,6 +697,7 @@ class Dashboard(Repository):
             ],
             "assetSource": payload(self.db, "asset_source"),
             "assembly": payload(self.db, "assembly_summary"),
+            "sourceChecks": payload(self.db, "sourceChecks", {}),
             "geoSources": payload(self.db, "geo", {})
             .get("projection", {})
             .get("sources", []),

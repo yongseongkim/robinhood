@@ -200,17 +200,17 @@ def real_api():
 
 
 def test_real_collection_reconciles_with_design_snapshot(real_api):
-    page = real_api.get("/api/v1/members").json()
+    page = real_api.get("/api/v1/members?report=ka:2024-22").json()
     assert page["total"] == 301
     assert page["summary"]["amount"] == 39320879698
     democratic = real_api.get(
-        "/api/v1/rankings", params={"party": "더불어민주당"}
+        "/api/v1/rankings", params={"party": "더불어민주당", "report": "ka:2024-22"}
     ).json()
     assert democratic["n"] == 171 and democratic["total"] == 23922562354
-    mapo = real_api.get("/api/v1/councils/mapo").json()
+    mapo = real_api.get("/api/v1/councils/mapo?year=2024").json()
     assert mapo["summary"]["amount"] == 107890640 and mapo["summary"]["count"] == 916
     assert mapo["summary"]["months"] == 12
-    place = real_api.get("/api/v1/places/" + public_merchant_id("b1071638735")).json()
+    place = real_api.get("/api/v1/places/" + public_merchant_id("b1071638735"), params={"start":"2023-01-01","end":"2024-12-31"}).json()
     assert place["merchant"]["name"] == "가시리"
     assert (
         place["summary"]["payments"] == 424 and place["summary"]["amount"] == 79713893
@@ -222,14 +222,14 @@ def test_real_collection_reconciles_with_design_snapshot(real_api):
     )
     local = real_api.get(
         "/api/v1/places/" + public_merchant_id("b1071638735"),
-        params={"fundingType": "COUNCIL_OPERATION"},
+        params={"fundingType": "COUNCIL_OPERATION","start":"2024-01-01","end":"2024-12-31"},
     ).json()
     assert local["summary"]["amount"] == 166000 and local["summary"]["count"] == 1
     assert (
-        real_api.get("/api/v1/places", params={"region": "서울 영등포구"}).json()[
+        real_api.get("/api/v1/places", params={"region": "서울 영등포구","start":"2023-01-01","end":"2024-12-31"}).json()[
             "total"
         ]
-        == 1127
+        == 1134
     )
 
 

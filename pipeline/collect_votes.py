@@ -5,6 +5,7 @@
 - 이미 받은 의안은 건너뛰므로 중간에 멈춰도 이어받고, 새 의안만 더 받는다.
 - 1초에 1회 이하로 천천히 요청하고, 오류가 연속되면 멈춘다. 인증키는 기록하지 않는다.
 """
+from datetime import date, timedelta
 import json
 import sys
 import time
@@ -13,6 +14,7 @@ import requests
 
 import credentials
 from common import RAW
+from source_status import atomic_bytes, check_source
 
 BASE = "https://open.assembly.go.kr/portal/openapi/"
 OUT = RAW / "assembly" / "votes"
@@ -37,59 +39,53 @@ def processed_bills(session, key, age):
     while True:
         d = get(session, key, "ncocpgfiaoituanbr", AGE=age, pIndex=page, pSize=1000).get("ncocpgfiaoituanbr")
         if not d:
-            break
+            raise RuntimeError("처리 의안 목록 응답 누락")
         total = d[0]["head"][0]["list_total_count"]
-        rows += d[1]["row"] if len(d) > 1 else []
+        batch = d[1]["row"] if len(d) > 1 else []
+        if not batch and len(rows) < total:
+            raise ValueError("처리 의안 목록 일부 누락")
+        rows += batch
         if len(rows) >= total:
             break
         page += 1
         time.sleep(PAUSE)
+    if len(rows) != total or len({r["BILL_ID"] for r in rows}) != total:
+        raise ValueError("처리 의안 목록 일부 중복 또는 누락")
     keep = ("BILL_ID", "BILL_NO", "BILL_NAME", "PROC_DT", "PROC_RESULT_CD", "CURR_COMMITTEE", "MEMBER_TCNT", "VOTE_TCNT",
             "YES_TCNT", "NO_TCNT", "BLANK_TCNT", "LINK_URL")
     return [{k: r.get(k) for k in keep} for r in rows]
 
 
 def main():
-    try:
-        key = credentials.get("assembly_api_key")
-    except credentials.MissingCredential as e:
-        print(f"표결 수집 건너뜀: {e}", file=sys.stderr)
-        return
+    key = credentials.get("assembly_api_key")
     s = requests.Session()
     s.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robinhood-collector"
-    errors_in_row = 0
     for age in (22, 21):
         folder = OUT / str(age)
         folder.mkdir(parents=True, exist_ok=True)
         bills = processed_bills(s, key, age)
-        (OUT / f"processed_{age}.json").write_text(json.dumps(bills, ensure_ascii=False))
-        todo = [b for b in bills if b.get("BILL_ID") and not (folder / f"{b['BILL_ID']}.json").exists()]
+        atomic_bytes(OUT / f"processed_{age}.json", json.dumps(bills, ensure_ascii=False).encode())
+        recent = (date.today() - timedelta(days=30)).strftime("%Y%m%d")
+        todo = []
+        for b in bills:
+            path = folder / f"{b['BILL_ID']}.json"
+            if not path.exists() or (str(b.get("PROC_DT") or "").replace("-", "") >= recent
+                                     and not json.loads(path.read_text()).get("votes")):
+                todo.append(b)
         print(f"제{age}대 처리 의안 {len(bills)}건, 새로 받을 표결 {len(todo)}건", file=sys.stderr)
         for i, b in enumerate(todo, 1):
-            try:
-                d = get(s, key, "nojepdqqaweusdfbi", AGE=age, BILL_ID=b["BILL_ID"], pIndex=1, pSize=1000)
-                errors_in_row = 0
-            except RuntimeError as e:
-                errors_in_row += 1
-                print(f"  실패 {b['BILL_ID']}: {e}", file=sys.stderr)
-                if errors_in_row >= 5:
-                    print("연속 실패 5회 — 이용 제한일 수 있어 멈춤. 나중에 다시 실행하면 이어받는다.", file=sys.stderr)
-                    return
-                continue
+            d = get(s, key, "nojepdqqaweusdfbi", AGE=age, BILL_ID=b["BILL_ID"], pIndex=1, pSize=1000)
             body = d.get("nojepdqqaweusdfbi")
-            if body is None:
-                code = (d.get("RESULT") or {}).get("CODE")
-                if code and code != "INFO-200":  # INFO-200 = 해당 자료 없음(표결 없이 처리된 안건)
-                    print(f"  응답 코드 {code}: {(d.get('RESULT') or {}).get('MESSAGE')}", file=sys.stderr)
-                    if code.startswith("ERROR-3") or "제한" in str(d.get("RESULT")):
-                        print("이용 제한 응답 — 멈춤.", file=sys.stderr)
-                        return
+            if body is None and (d.get("RESULT") or {}).get("CODE") != "INFO-200":
+                raise RuntimeError("표결 조회 실패")
             rows = body[1]["row"] if body and len(body) > 1 else []
+            if body and len(rows) != body[0]["head"][0]["list_total_count"]:
+                raise ValueError("의원별 표결 누락")
             first = rows[0] if rows else {}
             rec = {"BILL_ID": b["BILL_ID"], "BILL_NAME": first.get("BILL_NAME") or b.get("BILL_NAME"),
                    "VOTE_DATE": first.get("VOTE_DATE"), "CURR_COMMITTEE": first.get("CURR_COMMITTEE"),
                    "votes": [[r.get("MONA_CD"), r.get("HG_NM"), r.get("POLY_NM"), r.get("RESULT_VOTE_MOD")] for r in rows]}
-            (folder / f"{b['BILL_ID']}.json").write_text(json.dumps(rec, ensure_ascii=False))
+            atomic_bytes(folder / f"{b['BILL_ID']}.json", json.dumps(rec, ensure_ascii=False).encode())
             if i % 100 == 0:
                 print(f"  제{age}대 {i}/{len(todo)}", file=sys.stderr)
             time.sleep(PAUSE)
@@ -97,4 +93,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    check_source("votes", main)

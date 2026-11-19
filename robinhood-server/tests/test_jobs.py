@@ -81,3 +81,16 @@ def test_interrupted_run_is_recovered_after_lock_acquisition(config):
 def test_invalid_schedule_does_not_start_work(interval):
     with pytest.raises(ValueError):
         validate_policy(interval, ())
+
+
+def test_partial_source_publishes_other_data_and_retries(config):
+    status_dir = config.data.parent / "raw/source-status"
+    status_dir.mkdir(parents=True)
+    status = {"state": "partial", "checkedAt": "2026-10-31", "lastSuccess": "2026-10-30"}
+    (status_dir / "votes.json").write_text(json.dumps(status))
+    clock = Clock()
+    runner = lambda command, **kwargs: subprocess.CompletedProcess(command, 0)
+    result = run_due(config, clock=clock, runner=runner, retry_seconds=(60,))
+    assert result["state"] == "partial" and result["published"] and result["retryScheduled"]
+    assert result["sourceChecks"]["votes"] == status
+    assert run_due(config, clock=clock, runner=runner)["state"] == "waiting"

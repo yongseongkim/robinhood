@@ -14,6 +14,7 @@ from collections import Counter, defaultdict
 import pdfplumber
 
 from common import NORMALIZED, RAW, SIDO
+from source_status import atomic_bytes
 
 SRC = RAW / "assets"
 HEADER = re.compile(r"소속\s*(\S+)\s*직위\s*(.+?)\s*성명\s*(\S+)\s*$")
@@ -199,7 +200,7 @@ def main():
     if not manifest:
         print("재산공개 PDF 없음 — collect_assets.py를 먼저 실행", file=sys.stderr)
         return
-    issue = max(manifest, key=lambda m: m["date"])
+    issue = max((m for m in manifest if "정기재산공개" in m["title"]), key=lambda m: m["date"])
     raw = parse(SRC / issue["file"])
     members = [p for p in raw if p["position"] in MEMBER_POS]
     link(members)
@@ -226,14 +227,16 @@ def main():
             "cats": {c: {"prev": won(v[0]), "cur": won(v[3])} for c, v in p["cats"].items() if c != "고지거부"},
             "realestate": realestate, "refused": refused, "cryptoCount": len(crypto), "checked": not probs,
         })
+    if not out or problems:
+        raise ValueError(f"정기재산공개 총계 검증 실패: {len(problems)}명")
     report = {"people": len(out), "linked": sum(1 for p in out if p["sid"]), "items": sum(len(p["items"]) for p in members),
               "realestate": sum(len(p["realestate"]) for p in out), "problems": problems,
               "unlinked": [p["name"] for p in out if not p["sid"]]}
-    (NORMALIZED / "assets.json").write_text(json.dumps({
+    atomic_bytes(NORMALIZED / "assets.json", json.dumps({
         "source": {"title": issue["title"], "notice": "국회공직자윤리위원회공고 제2026-3호" if "2026-54" in issue["title"] else None,
                    "published": issue["date"], "basis": f"{int(issue['date'][:4]) - 1}-12-31", "url": issue["url"], "sha256": issue["sha256"],
                    "listPage": issue["list_page"]},
-        "people": out, "report": report}, ensure_ascii=False))
+        "people": out, "report": report}, ensure_ascii=False).encode())
     print(json.dumps({k: (v if not isinstance(v, (dict, list)) else len(v)) for k, v in report.items()}, ensure_ascii=False), file=sys.stderr)
     for name, probs in list(problems.items())[:15]:
         print(f"  확인 필요 {name}: {probs}", file=sys.stderr)
