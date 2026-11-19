@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta
 
 import openpyxl
 
+from ka_catalog import workbook
 from councils import load_registry
 from ocr_overlay import load_rows as load_ocr_rows
 
@@ -82,16 +83,6 @@ def council_term(d, source_id):
     s, e = (date(start_year, 7, 1), date(start_year + 2, 6, 30)) if first_half else (date(start_year + 2, 7, 1), date(start_year + 4, 6, 30))
     return f"제{n}대 {'전반기' if first_half else '후반기'}", s.isoformat(), e.isoformat()
 
-KA_FILES = {  # 같은 대수는 나중 파일의 정당·지역구가 앞의 것을 덮어쓴다 (연도 오름차순)
-    "23": {"file": "2023_KAPF_income_expense.xlsx", "src_name": "2023_KAPF_수입지출.xlsx", "assembly": "제21대",
-           "year": 2023, "period": ("2023-01-01", "2023-12-31")},
-    "21": {"file": "2024_KAPF-21_income_expense.xlsx", "src_name": "2024_KAPF-21_수입지출.xlsx", "assembly": "제21대",
-           "year": 2024, "period": ("2024-01-01", "2024-12-31"), "term_end": "2024-05-29"},
-    "22": {"file": "2024_KAPF-22_income_expense.xlsx", "src_name": "2024_KAPF-22_수입지출.xlsx", "assembly": "제22대",
-           "year": 2024, "period": ("2024-01-01", "2024-12-31"), "term_start": "2024-05-30"},
-    "25": {"file": "2025_KAPF_income_expense.xlsx", "src_name": "2025_KAPF_수입지출.xlsx", "assembly": "제22대",
-           "year": 2025, "period": ("2025-01-01", "2025-12-31"), "doc_id": "ka:2025-22", "expense_src": "2025_KAPF.xlsx"},
-}
 
 
 def funding_type_of(budget_item):
@@ -197,15 +188,17 @@ def load_ka():
     manifest = {m["filename"]: m for m in json.loads((RAW / "ka-money" / "manifest.json").read_text())}
     rows, subjects, documents = [], {}, []
     in_2023 = set()
-    for term, meta in KA_FILES.items():
+    reports = [r for name in manifest if (r := workbook(name)) and r["detailed"]]
+    for meta in sorted(reports, key=lambda r: r["id"]):
+        term = meta["key"]
         if meta["src_name"] not in manifest:
             print(f"  (skip KA-money {meta['src_name']}: not downloaded)", file=sys.stderr)
             continue
         m = manifest[meta["src_name"]]
         expense_cats = expense_categories(meta, manifest)
-        doc_id = meta.get("doc_id") or (f"ka:{meta['year']}-{term}" if term != "23" else "ka:2023")
+        doc_id = meta["id"]
         documents.append({
-            "doc_id": doc_id, "source_id": "ka-money",
+            "doc_id": doc_id, "source_id": "ka-money", "assembly": meta["assembly"],
             "title": f"국회의원 정치자금 수입·지출 ({meta['year']}, {meta['assembly']} 회계보고분)",
             "url": m["github_url"], "sha256": m["sha256"], "fetched_at": m["fetched_at"],
             "format": "XLSX (OCR 정제본)", "period": f"{meta['period'][0]} ~ {meta['period'][1]}",
@@ -238,7 +231,9 @@ def load_ka():
                 "id": sid, "type": "LEGISLATOR", "name": clean_text(g(r, "name")), "official_no": int(oid),
                 "org": "국회", "terms": {}, "funding_types": ["POLITICAL_FUND"],
             })
-            s["terms"][meta["assembly"]] = {"party": clean_text(g(r, "party")), "district": clean_text(g(r, "district"))}
+            info = {"party": clean_text(g(r, "party")), "district": clean_text(g(r, "district"))}
+            s.setdefault("report_terms", {})[doc_id] = info
+            s["terms"][meta["assembly"]] = info
             if term == "23":
                 in_2023.add(sid)
             cat, exp, inc = g(r, "cat"), g(r, "exp"), g(r, "inc")
@@ -259,10 +254,24 @@ def load_ka():
                 biztype=g(r, "biztype"), receipt=g(r, "receipt"), cat=cat, account=account_label(g(r, "account")),
                 doc_id=doc_id, period=meta["period"],
             ))
+        if meta["year"] >= 2025:
+            # The companion expense-only workbook is independently published.
+            expense_name = meta["src_name"].replace("_수입지출", "")
+            if expense_name not in manifest:
+                raise ValueError(f"{doc_id} 대조용 지출 파일 없음")
+            check = openpyxl.load_workbook(ROOT / manifest[expense_name]["local_path"], read_only=True, data_only=True)
+            check_rows = check.worksheets[0].values
+            fields = next(check_rows)
+            amount_index = fields.index("지출액")
+            amounts = [to_int(row[amount_index]) for row in check_rows if row[fields.index("의원번호")] is not None]
+            check.close()
+            actual = [r["amount"] for r in rows if r["doc_id"] == doc_id]
+            if None in amounts or len(actual) != len(amounts) or sum(actual) != sum(amounts):
+                raise ValueError(f"{doc_id} 지출 파일 건수·금액 대조 실패")
         wb.close()
     # 2024년 상반기(제21대 회계) 파일에는 제22대 총선 예비후보자의 회계도 들어 있다.
     # 2023년(현직 의원만 수록) 자료가 없는 사람은 제21대 의원이 아니라 예비후보 기간 회계로 본다.
-    if any(m.get("year") == 2023 for m in KA_FILES.values()) and in_2023:
+    if in_2023:
         for sid, s in subjects.items():
             if "제21대" in s["terms"] and sid not in in_2023:
                 s["precandidate"] = s["terms"].pop("제21대")

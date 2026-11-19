@@ -52,10 +52,11 @@ def create_app(config: Settings = settings):
     Repo = Annotated[Dashboard, Depends(repository)]
 
     def report_scope(
-        repo: Repo, report: str | None = None, start: date | None = None, end: date | None = None
+        repo: Repo,
+        report: str | None = None, start: date | None = None, end: date | None = None
     ):
-        return report_period(
-            report or repo.latest_report(),
+        return repo.report_scope(
+            report,
             start.isoformat() if start else None,
             end.isoformat() if end else None,
         )
@@ -70,12 +71,12 @@ def create_app(config: Settings = settings):
             funding,
         )
 
-    def place_scope(repo, funding, start, end):
-        if funding not in ("POLITICAL_FUND", "COUNCIL_OPERATION"):
+    def place_scope(repo, funding, start, end, detail=False):
+        if funding not in (FUNDS if detail else {"POLITICAL_FUND", "COUNCIL_OPERATION"}):
             raise ValueError(
                 "장소 비교는 정치자금 또는 의회운영업무추진비를 각각 선택합니다."
             )
-        latest = report_period(repo.latest_report()) if funding == "POLITICAL_FUND" else council_scope(repo)
+        latest = repo.report_scope() if funding == "POLITICAL_FUND" else council_scope(repo)
         return period(
             start.isoformat() if start else latest["start"],
             end.isoformat() if end else latest["end"],
@@ -108,11 +109,11 @@ def create_app(config: Settings = settings):
     @app.get("/api/v1/overview")
     def overview(
         repo: Repo,
-        region: str = Query("서울 마포구", max_length=100),
+        region: str = Query("", max_length=100),
         report: str | None = None,
         year: int | None = Query(None, ge=2010, le=2100),
     ):
-        return repo.overview(region, report_period(report or repo.latest_report()), council_scope(repo, year))
+        return repo.overview(region, repo.report_scope(report), council_scope(repo, year))
 
     @app.get("/api/v1/member-rankings")
     def member_rankings(
@@ -120,7 +121,14 @@ def create_app(config: Settings = settings):
         report: str | None = None,
         party: str = Query("", max_length=100),
     ):
-        return repo.member_rankings(report_period(report or repo.latest_report()), party)
+        # Asset boards use their own disclosure periods even when a selected accounting period is empty.
+        scope = report_period(report) if report else repo.report_scope()
+        return repo.member_rankings(scope, party)
+
+    @app.get("/api/v1/roster")
+    def roster(repo: Repo, region: str = Query("", max_length=100), q: str = Query("", max_length=100),
+               party: str = Query("", max_length=100), district: str = Query("", max_length=30)):
+        return repo.directory(region, q, party, district)
 
     @app.get("/api/v1/members")
     def members(
@@ -154,11 +162,11 @@ def create_app(config: Settings = settings):
         end: date | None = None,
         page: int = Query(1, ge=1),
     ):
-        report = report or repo.latest_report()
+        sid = repo.resolve_member(sid)
         subject = repo.subject(sid, report)
         scope = (
-            report_period(
-                report or repo.latest_report(),
+            repo.report_scope(
+                report,
                 start.isoformat() if start else None,
                 end.isoformat() if end else None,
             )
@@ -213,8 +221,8 @@ def create_app(config: Settings = settings):
         scope = (
             council_scope(repo, year, funding, start, end)
             if target == "councils"
-            else report_period(
-                report or repo.latest_report(),
+            else repo.report_scope(
+                report,
                 start.isoformat() if start else None,
                 end.isoformat() if end else None,
             )
@@ -244,9 +252,15 @@ def create_app(config: Settings = settings):
         funding: str = Query("POLITICAL_FUND", alias="fundingType"),
         start: date | None = None,
         end: date | None = None,
+        report: str | None = None,
+        meal_only: bool = Query(True, alias="mealOnly"),
         page: int = Query(1, ge=1),
     ):
-        return repo.place(mid, place_scope(repo, funding, start, end), page)
+        if report and funding != "POLITICAL_FUND":
+            raise ValueError("정치자금 보고서는 정치자금 재원에서만 선택할 수 있습니다.")
+        scope = (repo.report_scope(report, start.isoformat() if start else None, end.isoformat() if end else None)
+                 if report else place_scope(repo, funding, start, end, detail=not meal_only))
+        return repo.place(mid, scope, page, meal_only)
 
     @app.get("/api/v1/transactions")
     def transactions(
@@ -263,26 +277,16 @@ def create_app(config: Settings = settings):
         page_size: int = Query(12, alias="pageSize", ge=1, le=100),
     ):
         scope = (
-            report_period(
-                report or repo.latest_report(),
+            repo.report_scope(
+                report,
                 start.isoformat() if start else None,
                 end.isoformat() if end else None,
             )
             if report
-            else period(
-                start.isoformat() if start else (
-                    report_period(repo.latest_report())["start"] if funding == "POLITICAL_FUND"
-                    else f"{repo.latest_council_year()}-01-01"
-                ),
-                end.isoformat() if end else (
-                    report_period(repo.latest_report())["end"] if funding == "POLITICAL_FUND"
-                    else f"{repo.latest_council_year()}-12-31"
-                ),
-                funding,
-            )
+            else place_scope(repo, funding, start, end, detail=True)
         )
         return repo.transactions(
-            scope, subject_id, merchant_id, category, q, page, page_size
+            scope, repo.resolve_member(subject_id), merchant_id, category, q, page, page_size
         )
 
     @app.get("/api/v1/transactions/{tid}")

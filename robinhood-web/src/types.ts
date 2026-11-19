@@ -35,7 +35,39 @@ export type Holder = {
   sourceTitle?: string;
   confidence?: string;
 };
+export type SourceCheck = {
+  state: string;
+  checkedAt: string;
+  lastSuccess?: string;
+};
+export type Seat = {
+  id: string;
+  subjectId: string;
+  name: string;
+  district: string;
+  party?: string;
+  districtCode?: string;
+  electionType?: string;
+};
+export type Roster = {
+  rows: Seat[];
+  total: number;
+  parties: string[];
+  asOf?: string;
+  check?: SourceCheck;
+};
+export type Filing = {
+  name: string;
+  published: string;
+  basis?: string;
+  kind: string;
+  url: string;
+  title?: string;
+  page?: number;
+  amount?: number;
+};
 export type Subject = {
+  currentSeat?: Seat;
   id: string;
   name: string;
   type: string;
@@ -71,6 +103,7 @@ export type Transaction = {
   subjectName: string;
   merchantId?: string;
   payee?: string;
+  payeeRegion?: string;
   fundingType: string;
   account?: string;
   attendees?: number;
@@ -162,6 +195,9 @@ export type Activity = {
     }
   >;
   fetchedAt?: string;
+  billDates?: Record<string, { checkedAt?: string; latest?: string }>;
+  voteDates?: Record<string, string>;
+  checks?: Record<string, SourceCheck>;
 };
 export type Finding = {
   id: string;
@@ -184,6 +220,8 @@ export type Profile = {
   incomeCarry: Record<string, number>;
   incomeYear: string;
   assets?: Asset;
+  filings?: Filing[];
+  seatObservations?: { asOf: string; district: string; party?: string }[];
   activity?: Activity;
   transactions: TransactionPage;
   findings: Finding[];
@@ -223,6 +261,7 @@ export type Overview = {
   region: string;
   scope: Scope;
   members: MemberPage;
+  roster: Roster;
   council?: Council;
   cityCouncil?: Council;
   localFiscalAvailable: boolean;
@@ -328,7 +367,14 @@ export type Meta = {
   fundingTypes: Record<string, { label: string; description: string }>;
   councils: CouncilItem[];
   parties: string[];
-  reports: { id: string; title: string; period: string }[];
+  reports: {
+    id: string;
+    title: string;
+    period: string;
+    year: number;
+    assembly: string;
+    checkedAt?: string;
+  }[];
   councilYears: number[];
   documents: number;
   merchants: number;
@@ -340,6 +386,7 @@ export type MapFeature = {
   name: string;
   short?: string;
   sgg?: string;
+  sido_short?: string;
   d: string;
   cx: number;
   cy: number;
@@ -356,6 +403,14 @@ export type Geo = {
   seoul: MapFeature[];
   districts: MapFeature[];
   seoulDistricts: MapFeature[];
+  sigungu: MapFeature[];
+  neighborhoods: {
+    code: string;
+    name: string;
+    municipality: string;
+    method: "statute" | "boundary";
+    districtCodes: string[];
+  }[];
 };
 export type FiscalRow = {
   name: string;
@@ -446,6 +501,7 @@ export type Sources = {
     { count: number; time: number; attendees: number; payment: number }
   >;
   findingCount: number;
+  sourceChecks?: Record<string, SourceCheck>;
   assetSource: AssetSource;
   assembly: { fetched_at: string };
   geoSources: { url: string; attribution: string }[];

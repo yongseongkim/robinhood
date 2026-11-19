@@ -32,6 +32,8 @@ def test_2025_report_header_income_and_private_recipient(tmp_path, monkeypatch):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(['의원번호', '연월일', '지출액', '내역', '분류', '사용처'])
+    ws.append([279, datetime(2025, 2, 1), 50000, '간담회', '간담회_식대', '식당'])
+    ws.append([279, datetime(2025, 2, 2), 10000, '보수', '인건비_보수', '홍길동'])
     ws.append([279, datetime(2025, 2, 4), -5000, '간담회', '간담회_식대', '식당'])
     wb.save(expense)
     (raw / 'manifest.json').write_text(json.dumps([{

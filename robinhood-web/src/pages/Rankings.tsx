@@ -27,8 +27,7 @@ export function Rankings() {
     metric =
       params.get("metric") ||
       (target === "councils" ? "monthly_average" : "amount");
-  const party =
-      params.get("party") ?? (target === "members" ? "더불어민주당" : "all"),
+  const party = params.get("party") ?? "all",
     category = params.get("category") || "";
   const report = params.get("report") || meta.reports[0]?.id || "ka:2024-22",
     year = params.get("year") || String(meta.councilYears[0]);
@@ -80,7 +79,7 @@ export function Rankings() {
             metric: target === "councils" ? "monthly_average" : "amount",
             category: "",
             month: "",
-            party: target === "members" ? "더불어민주당" : "all",
+            party: "all",
           })
         }
       />

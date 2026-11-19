@@ -74,10 +74,15 @@ export function Profile({ id }: { id: string }) {
   const [billQuery, setBillQuery] = useState("");
   if (!data) return <ResourceState {...resource} />;
   const leg = data.subject.type === "LEGISLATOR";
-  const age = report.includes("2023") || report.endsWith("-21") ? "21" : "22";
+  const age = (
+    meta.reports.find((r) => r.id === report)?.assembly || ""
+  ).replace(/\D/g, "");
   const bills = data.activity?.bills[age],
     votes = data.activity?.votes[age];
   const asset = data.assets;
+  const recent = data.filings?.find(
+    (f) => !asset || f.published > asset.source.published,
+  );
   const preview = data.transactions.rows[0];
   const showMoney = tab === "money";
   const current = (next: string) => changeFilters({ tab: next, page: "" });
@@ -87,8 +92,11 @@ export function Profile({ id }: { id: string }) {
         title={data.subject.name}
         context={leg ? "의원 프로필" : "직책 프로필"}
         description={[
-          data.subject.district || data.subject.org,
-          data.subject.party,
+          data.subject.currentSeat?.district ||
+            data.subject.district ||
+            data.subject.org,
+          data.subject.currentSeat?.party || data.subject.party,
+          leg && (data.subject.currentSeat ? "현직" : "회계보고 당시 소속"),
           data.subject.role,
           data.subject.term,
           data.activity?.committees,
@@ -97,6 +105,15 @@ export function Profile({ id }: { id: string }) {
           .filter(Boolean)
           .join(" · ")}
       />
+      {leg && data.seatObservations?.length ? (
+        <SourceNote>
+          열린국회정보 명부 · 최근 확인{" "}
+          {data.seatObservations[data.seatObservations.length - 1].asOf}
+          {data.subject.currentSeat && (
+            <> · {data.subject.currentSeat.district}</>
+          )}
+        </SourceNote>
+      ) : null}
       <Tabs
         items={[
           { value: "overview", label: "한눈에" },
@@ -148,10 +165,14 @@ export function Profile({ id }: { id: string }) {
             />
             <Stat
               label="신고 순재산"
-              value={shortWon(asset?.total.cur)}
-              exact={asset?.total.cur}
+              value={shortWon(recent ? recent.amount : asset?.total.cur)}
+              exact={recent ? recent.amount : asset?.total.cur}
               detail={
-                asset ? asset.source.basis + " 기준" : "현재 수집 자료와 미연결"
+                recent
+                  ? (recent.basis || "등록일 미상") + " 기준 · 수시공개"
+                  : asset
+                    ? asset.source.basis + " 기준 · 정기공개"
+                    : "현재 수집 자료와 미연결"
               }
             />
             <Stat
@@ -224,10 +245,31 @@ export function Profile({ id }: { id: string }) {
           <Panel
             title="신고재산"
             description={
-              asset ? asset.source.basis + " 기준" : "수집 자료와 미연결"
+              recent
+                ? recent.published + " 수시공개"
+                : asset
+                  ? asset.source.basis + " 정기신고 기준"
+                  : "수집 자료와 미연결"
             }
           >
-            {asset ? (
+            {recent ? (
+              <>
+                <div className="person-amount">
+                  {recent.amount == null
+                    ? "금액 확인 중"
+                    : shortWon(recent.amount)}
+                </div>
+                <p>
+                  {recent.basis || "등록기준일 미확인"} 기준 · 가족 신고분 포함
+                </p>
+                <button
+                  className="button-link"
+                  onClick={() => current("assets")}
+                >
+                  신고 내역 보기 →
+                </button>
+              </>
+            ) : asset ? (
               <>
                 <KeyValues
                   rows={[
@@ -252,7 +294,7 @@ export function Profile({ id }: { id: string }) {
                 </button>
               </>
             ) : (
-              <Empty>이 인물의 재산 자료는 아직 연결되지 않았습니다.</Empty>
+              <Empty>연결된 정기 재산신고가 없습니다.</Empty>
             )}
           </Panel>
           <Panel
@@ -294,7 +336,7 @@ export function Profile({ id }: { id: string }) {
             title="거래 내역"
             description="표의 금액은 각 거래 1건입니다. 취소·반환은 음수로 표시합니다."
           >
-            <Transactions rows={data.transactions.rows} />
+            <Transactions scope={data.scope} rows={data.transactions.rows} />
             <Pagination
               {...data.transactions}
               onChange={(page) => changeFilters({ page })}
@@ -329,12 +371,32 @@ export function Profile({ id }: { id: string }) {
           )}
         </>
       )}
+      {tab === "assets" && !!data.filings?.length && (
+        <Section title="수시 재산공개">
+          {data.filings.map((f) => (
+            <Panel
+              key={f.published + "-" + f.basis}
+              title={f.published + " 수시공개"}
+              description={(f.basis || "미확인") + " 등록 기준"}
+            >
+              <div className="person-amount">
+                {f.amount == null ? "신고 총액 확인 중" : won(f.amount)}
+              </div>
+              <External url={f.url}>
+                {f.title
+                  ? f.title + " · " + f.page + "쪽"
+                  : "공직윤리시스템에서 이름·공개일로 확인"}
+              </External>
+            </Panel>
+          ))}
+        </Section>
+      )}
       {tab === "assets" &&
         (asset ? (
           <>
             <SourceNote>
               {asset.source.basis} 기준 · {asset.source.published} 공개 ·
-              신고가액 · 가족 신고분 포함
+              정기신고 · 가족 신고분 포함
             </SourceNote>
             <div className="metrics">
               <Stat
@@ -415,10 +477,7 @@ export function Profile({ id }: { id: string }) {
             </SourceNote>
           </>
         ) : (
-          <Empty>
-            이 인물에 연결된 신고재산 자료가 없습니다. 지방의원 재산은 아직
-            수집하지 않았습니다.
-          </Empty>
+          <Empty>이 인물에 연결된 정기 재산신고가 없습니다.</Empty>
         ))}
       {tab === "activity" &&
         (data.activity ? (
@@ -520,9 +579,20 @@ export function Profile({ id }: { id: string }) {
               <Empty>선택한 대수의 표결 자료가 없습니다.</Empty>
             )}
             <SourceNote>
-              열린국회 수집본 · {data.activity.fetchedAt?.slice(0, 10)}. 처리
-              결과가 비어 있으면 미기재로 표시합니다. 법안 목록과 표결 기록을
-              임의로 연결하지 않습니다.
+              법안 최근 발의일{" "}
+              {data.activity.billDates?.[age]?.latest || "미확인"} · 법안 확인{" "}
+              {data.activity.billDates?.[age]?.checkedAt?.slice(0, 10) ||
+                "미확인"}{" "}
+              · 최근 표결일 {data.activity.voteDates?.[age] || "미확인"} · 표결
+              확인{" "}
+              {data.activity.checks?.votes?.lastSuccess?.slice(0, 10) ||
+                "미확인"}
+              .{" "}
+              {(data.activity.checks?.votes?.state === "partial" ||
+                data.activity.checks?.["bills-" + age]?.state === "partial") &&
+                "일부 자료 갱신 실패. "}
+              처리 결과가 비어 있으면 미기재로 표시합니다. 법안 목록과 표결
+              기록을 임의로 연결하지 않습니다.
             </SourceNote>
           </>
         ) : (
