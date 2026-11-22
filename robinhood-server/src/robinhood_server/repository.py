@@ -3,7 +3,8 @@ from statistics import median
 
 from .db import array_values, escaped_like, is_postgres, payload, records
 from .index import public_merchant_id
-from .scopes import REPORTS, month_series
+from .scopes import month_series, report_period
+from .catalog import report_info
 
 
 class NotFound(LookupError):
@@ -13,6 +14,57 @@ class NotFound(LookupError):
 class Repository:
     def __init__(self, db, config):
         self.db, self.config = db, config
+
+    def resolve_member(self, sid):
+        if sid.startswith("mona-"):
+            return payload(self.db, "memberAliases", {}).get(sid, sid)
+        return sid
+
+    def directory(self, region="", q="", party="", district_code=""):
+        people = payload(self.db, "roster", [])
+        from .constituency import region_label, seat_key
+        region = region_label(region)
+        normalized = seat_key(region)
+        province, _, rest = normalized.partition(" ")
+        district_codes = None
+        if region and rest:
+            geo = payload(self.db, "geo", {})
+            city = next((c for c in geo.get("sigungu", []) if c["name"] == region), None)
+            if city:
+                district_codes = {code for n in geo.get("neighborhoods", []) if n["municipality"] == city["code"]
+                                  for code in n["districtCodes"]}
+        def matches(m):
+            key = m["seatKey"]
+            in_region = (m.get("districtCode") in district_codes if district_codes is not None
+                         else not region or key == normalized or (key.startswith(province + " ") and rest in key[len(province)+1:]))
+            return (in_region
+                    and (not q or q in m["name"] or region_label(q) in region_label(m["district"]))
+                    and (not party or m["party"] == party)
+                    and (not district_code or m.get("districtCode") == district_code))
+        rows = sorted((m for m in people if matches(m)), key=lambda m: (m["district"], m["name"]))
+        summary = payload(self.db, "assembly_summary", {}) or {}
+        return {"rows": rows, "total": len(rows), "asOf": summary.get("fetched_at"),
+                "parties": sorted({m["party"] for m in people if m.get("party")}),
+                "check": payload(self.db, "sourceChecks", {}).get("roster")}
+
+    def reports(self):
+        result = []
+        for row in self.db.execute("SELECT id,data FROM documents WHERE source='ka-money' ORDER BY id DESC"):
+            info = report_info(row["id"])
+            if info:
+                doc = json.loads(row["data"])
+                result.append({"id": row["id"], "title": doc["title"], "period": doc["period"],
+                               "year": info[0], "assembly": info[1], "checkedAt": doc.get("fetched_at")})
+        return result
+
+    def report_scope(self, report=None, start=None, end=None):
+        reports = self.reports()
+        if not reports:
+            raise NotFound("수집된 정치자금 보고서가 없습니다.")
+        report = report or reports[0]["id"]
+        if report not in {r["id"] for r in reports}:
+            raise ValueError("수집되지 않은 보고서입니다.")
+        return report_period(report, start, end)
 
     def where(self, scope, extra="", values=()):
         sql = "t.duplicate_of IS NULL AND t.valid_period=1 AND t.funding_type=? AND t.date>=? AND t.date<=?"
@@ -60,8 +112,9 @@ class Repository:
             raise NotFound("지출 주체를 찾을 수 없습니다.")
         raw = json.loads(row["details"])
         term = (raw.get("terms") or {}).get(
-            REPORTS.get(report, (None, "제22대"))[1], {}
+            (report_info(report) or (None, "제22대"))[1], {}
         )
+        term = raw.get("report_terms", {}).get(report, term)
         holders = []
         for holder in raw.get("holders") or []:
             holders.append(
@@ -95,10 +148,11 @@ class Repository:
             "district": term.get("district", row["district"]),
             "attribution": raw.get("attribution_note"),
             "holders": holders,
+            "currentSeat": raw.get("currentSeat"),
         }
 
     def member_rows(self, scope, party="", q="", region="", category=""):
-        term = REPORTS[scope["reportId"]][1]
+        term = report_info(scope["reportId"])[1]
         path = '$.terms."' + term + '"'
         extra = "s.type='LEGISLATOR' AND json_type(s.details,?)='object'"
         values = [path]
@@ -111,6 +165,15 @@ class Repository:
             values = [term]
             party_expr = f"s.details->'terms'->'{term}'->>'party'"
             district_expr = f"s.details->'terms'->'{term}'->>'district'"
+        report = scope["reportId"]
+        if is_postgres(self.db):
+            report_expr = f"s.details->'report_terms'->'{report}'"
+            party_expr = f"COALESCE({report_expr}->>'party',{party_expr})"
+            district_expr = f"COALESCE({report_expr}->>'district',{district_expr})"
+        else:
+            path = f'$.report_terms."{report}"'
+            party_expr = f"COALESCE(json_extract(s.details,'{path}.party'),{party_expr})"
+            district_expr = f"COALESCE(json_extract(s.details,'{path}.district'),{district_expr})"
         if party:
             extra += f" AND {party_expr}=?"
             values.append(party)
@@ -119,15 +182,15 @@ class Repository:
             values.extend([escaped_like(q), escaped_like(q)])
         if region:
             parts = region.split()
-            for part in parts:
+            for index, part in enumerate(parts):
                 if part == "전남광주":
                     # Current administrative boundaries include the merger;
                     # historical reports retain their original district names.
                     extra += f" AND ({district_expr} LIKE ? ESCAPE '\\' OR {district_expr} LIKE ? ESCAPE '\\')"
-                    values.extend([escaped_like("전남"), escaped_like("광주")])
+                    values.extend(["전남%", "광주%"])
                 else:
                     extra += f" AND {district_expr} LIKE ? ESCAPE '\\'"
-                    values.append(escaped_like(part))
+                    values.append(escaped_like(part)[1:] if index == 0 else escaped_like(part))
         if category:
             extra += " AND t.category_group=?"
             values.append(category)
@@ -181,11 +244,14 @@ class Repository:
                 for k, v in asset.items()
                 if k not in ("name", "sid", "position", "party", "district")
             }
-            asset["source"] = payload(self.db, "asset_source")
+            asset.setdefault("source", payload(self.db, "asset_source"))
         if activity:
             m = activity.get("member") or {}
             activity = {
                 "committees": m.get("CMITS"),
+                "billDates": (payload(self.db, "assembly_summary", {}) or {}).get("billDates", {}),
+                "voteDates": (payload(self.db, "assembly_summary", {}) or {}).get("voteDates", {}),
+                "checks": payload(self.db, "sourceChecks", {}),
                 "reelection": m.get("REELE_GBN_NM"),
                 "bills": activity.get("bills") or {},
                 "votes": activity.get("votes") or {},
@@ -207,6 +273,8 @@ class Repository:
             "incomeCarry": {k: v for k, v in income.items() if "중복 가능" in k},
             "incomeYear": income_year,
             "assets": asset,
+            "filings": sorted(raw.get("filings", []), key=lambda f: (f["published"], f.get("basis") or ""), reverse=True),
+            "seatObservations": raw.get("observations", []),
             "activity": activity,
             "transactions": self.transactions(scope, subject_id=sid, page=page),
             "findings": self.findings(
@@ -231,7 +299,7 @@ class Repository:
             "note": "공개자료의 수록 월과 거래 1건의 금액을 구분합니다.",
         }
         data["subject"] = self.subject(
-            row["subject_id"], row["doc_id"] if row["doc_id"] in REPORTS else None
+            row["subject_id"], row["doc_id"] if report_info(row["doc_id"]) else None
         )
         data["document"] = self.document(row["doc_id"])
         data["pair"] = (
@@ -258,7 +326,7 @@ class Repository:
 
     def transaction_row(self, row):
         subject = self.subject(
-            row["subject_id"], row["doc_id"] if row["doc_id"] in REPORTS else None
+            row["subject_id"], row["doc_id"] if report_info(row["doc_id"]) else None
         )
         merchant = (
             self.db.execute(
@@ -277,6 +345,7 @@ class Repository:
             "amount": row["amount"],
             "description": row.get("description"),
             "category": row["category"],
+            "payeeRegion": row.get("payee_region"),
             "subjectId": row["subject_id"],
             "subjectName": subject["name"],
             "merchantId": row["merchant_id"],

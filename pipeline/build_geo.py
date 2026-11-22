@@ -44,7 +44,10 @@ ADMDONG = RAW / "admdongkor_HangJeongDong_ver20261001.geojson"
 ELEC22 = RAW / "ohmynews_2024_22_Elec_simplify.json"
 ELEC21 = RAW / "ohmynews_2020_21_elec_253_simple.json"
 
+ANNEX = RAW / "assembly22_district_annex.pdf"
+ANNEX_URL = "https://law.go.kr/LSW/flDownload.do?flSeq=163897897"
 SOURCES = [
+    {"file": ANNEX.name, "url": ANNEX_URL, "license": "대한민국 법령", "attribution": "공직선거법 별표 1 (2024-03-08) 국회의원지역선거구구역표"},
     {"file": ADMDONG.name, "url": "https://raw.githubusercontent.com/vuski/admdongkor/master/ver20261001/HangJeongDong_ver20261001.geojson",
      "license": "CC BY 4.0 (가공: vuski/admdongkor) + 공공누리 제1유형(원자료: 통계청 SGIS)",
      "attribution": "본 데이터는 통계청 통계지리정보서비스(SGIS, https://sgis.kostat.go.kr)에서 공공누리 제1유형으로 개방한 행정동 경계를 가공한 것이며"
@@ -125,6 +128,8 @@ def fetch_missing_sources():
                     or not data["features"]
                 ):
                     raise ValueError(f"Invalid map source: {source['file']}")
+            if target.suffix == ".pdf" and not temporary.read_bytes().startswith(b"%PDF"):
+                raise ValueError("선거구 구역표 PDF 오류")
             os.replace(temporary, target)
             downloaded += 1
         finally:
@@ -285,6 +290,52 @@ def legislator_districts():
     return by["제22대"], by["제21대"]
 
 
+def dong_name(name):
+    return re.sub(r"제(?=\d)", "", re.sub(r"[·ㆍ.\s]", "", name))
+
+
+def legal_areas(districts):
+    import pdfplumber
+    codes = {row["key"]: row["code"] for row in districts}
+    areas = defaultdict(lambda: defaultdict(set))
+    province, seats = "", set()
+    with pdfplumber.open(ANNEX) as annex:
+        for page in annex.pages:
+            for table in page.extract_tables():
+                for first, body in table:
+                    label = re.sub(r"\s", "", first or "")
+                    if "(지역구" in label:
+                        province = SIDO_SHORT[label.split("(")[0]]
+                    elif label.endswith("선거구"):
+                        code = codes[district_key(province, label)]
+                        seats.add(code)
+                        parent = re.sub(r"[갑을병정무기]?$", "", label.removesuffix("선거구"))
+                        for clause in (body or "").split(","):
+                            words = clause.split()
+                            if not words:
+                                continue
+                            # An explicit municipality applies to the following comma-separated dongs.
+                            if len(words) > 1 and words[-2].endswith(("구", "군", "시")):
+                                parent = "".join(words[:-1])
+                            unit = dong_name(words[-1])
+                            if unit == "일원" or unit.endswith(("동", "읍", "면", "가")):
+                                areas[(province, unit)][parent].add(code)
+    if len(seats) != 254:
+        raise ValueError("선거구 구역표 254개 선거구 대조 실패")
+    return areas
+
+
+def statutory_codes(areas, province, city, dong):
+    city = city.replace(" ", "")
+    result = set()
+    for unit in (dong_name(dong), "일원"):
+        for parent, codes in areas.get((province, unit), {}).items():
+            if (city == parent or (parent.endswith("시") and city.startswith(parent) and city.endswith("구"))
+                    or (parent.endswith("구") and city.endswith("시" + parent))):
+                result.update(codes)
+    return sorted(result)
+
+
 def main(*, fetch_missing=True):
     if fetch_missing:
         fetch_missing_sources()
@@ -294,9 +345,12 @@ def main(*, fetch_missing=True):
     print("loading admdong…", file=sys.stderr)
     adm = json.loads(ADMDONG.read_text())
     groups, meta = defaultdict(list), {}
+    neighborhoods = []
     for f in adm["features"]:
         p = f["properties"]
-        groups[p["sgg"]].append(project(f["geometry"]))
+        geometry = project(f["geometry"])
+        groups[p["sgg"]].append(geometry)
+        neighborhoods.append((p, geometry))
         meta[p["sgg"]] = (p["sido"], p["sidonm"], p["sggnm"])
     sgg_items = []
     for code in sorted(groups):
@@ -331,6 +385,23 @@ def main(*, fetch_missing=True):
         key = district_key(sido, sgg)
         d22.append({"code": str(p["SGG_Code"]), "short": p["SIDO_SGG"], "sido": sido, "key": key,
                     "name": k22.get(key, p["SIDO_SGG"]), "matched": key in k22, "geom": project(f["geometry"])})
+    # Compare only seats in the same province. Small boundary slivers come from
+    # the different map editions. Keep multiple candidates for split neighborhoods.
+    tree = STRtree([d["geom"] for d in d22])
+    areas = legal_areas(d22)
+    dong_rows = []
+    for p, geom in neighborhoods:
+        province = SIDO_SHORT[p["sidonm"]]
+        legacy = ("광주" if p["sggnm"] in FORMER_GWANGJU_GU else "전남") if p["sidonm"] == MERGED_SIDO else province
+        overlaps = [(geom.intersection(d22[i]["geom"]).area / geom.area, d22[i]["code"])
+                    for i in tree.query(geom) if d22[i]["sido"] == legacy]
+        candidates = sorted(code for fraction, code in overlaps if fraction >= 0.02)
+        if sum(fraction for fraction, _ in overlaps) < 0.65:
+            candidates = []
+        dong = p["adm_nm"].split()[-1]
+        legal = statutory_codes(areas, legacy, p["sggnm"], dong)
+        dong_rows.append({"method": "statute" if legal else "boundary", "code": p["adm_cd2"], "name": p["adm_nm"].split()[-1],
+                          "municipality": p["sgg"], "districtCodes": legal or candidates})
     e21 = json.loads(ELEC21.read_text())["features"]
     d21 = []
     for f in e21:
@@ -383,6 +454,7 @@ def main(*, fetch_missing=True):
         "sido": [entry(it, g, nat, MIN_PART_NATIONAL, {"code": it["code"], "name": it["name"], "short": it["short"],
                                                         **({"legacy": ["광주", "전남"]} if it["name"] == MERGED_SIDO else {})})
                  for it, g in zip(sido_items, nat_sido)],
+        "neighborhoods": dong_rows,
         "sigungu": [entry(it, g, nat, MIN_PART_NATIONAL, {
             "code": it["code"], "name": it["name"], "legacy_name": it["legacy_name"], "sido_short": it["sido_short"],
             "sgg": it["sgg"], "adjacent": sorted(idx[j] for j in adj[i]),

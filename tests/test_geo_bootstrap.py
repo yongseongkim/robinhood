@@ -98,3 +98,10 @@ def test_pipeline_respects_fetch_mode_for_collectors_and_maps(tmp_path, no_fetch
     map_command = next(command for command in commands if command[0] == "pipeline/build_geo.py")
     assert map_command == ["pipeline/build_geo.py"] + (["--no-fetch"] if no_fetch else [])
     assert any(command[0].startswith("pipeline/collect_") for command in commands) is not no_fetch
+
+
+def test_statutory_parent_keeps_neighboring_gu_separate():
+    areas = {("부산", "일원"): {"서구": {"west"}, "강서구": {"gangseo"}},
+             ("경기", "정자1동"): {"장안구": {"suwon"}}}
+    assert geo.statutory_codes(areas, "부산", "강서구", "대저1동") == ["gangseo"]
+    assert geo.statutory_codes(areas, "경기", "수원시 장안구", "정자제1동") == ["suwon"]

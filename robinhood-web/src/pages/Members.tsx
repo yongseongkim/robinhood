@@ -16,21 +16,22 @@ import {
   Stat,
   Tabs,
 } from "../components/ui";
-import type { MemberPage } from "../types";
+import type { MemberPage, Roster } from "../types";
 import { MemberRankings } from "../components/MemberRankings";
 import type { RankingView } from "../components/MemberRankings";
 
-const views: { value: RankingView | "list"; label: string }[] = [
+const views: { value: RankingView | "list" | "current"; label: string }[] = [
+  { value: "current", label: "현직 의원" },
   { value: "assets", label: "재산 순위" },
   { value: "changes", label: "연간 증감" },
   { value: "funds", label: "정치자금" },
   { value: "parties", label: "정당 비교" },
-  { value: "list", label: "의원 목록" },
+  { value: "list", label: "회계 보고자" },
 ];
 
 export function Members() {
   const { params } = useLocation();
-  const listRequested = ["q", "region", "sort", "page", "month"].some((key) =>
+  const listRequested = ["report", "sort", "month"].some((key) =>
     params.has(key),
   );
   const requestedView = params.get("view");
@@ -40,7 +41,7 @@ export function Members() {
       ? "assets"
       : listRequested
         ? "list"
-        : "assets");
+        : "current");
   const navigation = (
     <Tabs
       label="의원·정당 보기"
@@ -66,7 +67,12 @@ export function Members() {
         context="의원과 정당"
         description="재산·연간 증감·정치자금을 살펴보고 정당별 신고재산을 비교합니다."
       />
-      {view === "list" ? (
+      {view === "current" ? (
+        <>
+          {navigation}
+          <CurrentMembers />
+        </>
+      ) : view === "list" ? (
         <MemberList navigation={navigation} />
       ) : (
         <MemberRankings view={view} navigation={navigation} />
@@ -229,6 +235,81 @@ function MemberList({ navigation }: { navigation: ReactNode }) {
             {data.scope.note} 정당은 해당 회계자료에 연결된 표기이며, 현직 의원
             명부와 기준 시점이 다릅니다.
           </SourceNote>
+        </>
+      )}
+    </>
+  );
+}
+
+function CurrentMembers() {
+  const { params } = useLocation();
+  const q = params.get("q") || "",
+    region = params.get("region") || "";
+  const resource = useResource<Roster>(
+    "roster?" + query({ q, region, party: params.get("party") }),
+  );
+  const data = resource.data;
+  return (
+    <>
+      <div className="filters">
+        <SearchForm
+          value={q}
+          placeholder="의원 이름 또는 지역구 검색"
+          onSearch={(q) => changeFilters({ q })}
+        />
+        <Select
+          label="정당"
+          value={params.get("party") || ""}
+          options={[
+            { value: "", label: "정당 전체" },
+            ...(data?.parties || []).map((p) => ({ value: p, label: p })),
+          ]}
+          onChange={(party) => changeFilters({ party })}
+        />
+        {region && (
+          <button
+            className="chip"
+            onClick={() => changeFilters({ region: "" })}
+          >
+            {region} ×
+          </button>
+        )}
+      </div>
+      {!data ? (
+        <ResourceState {...resource} />
+      ) : (
+        <>
+          <SourceNote>
+            열린국회정보 명부 · {data.asOf?.slice(0, 10) || "확인일 미상"} ·{" "}
+            {count(data.total)}명{" "}
+            {data.check?.state === "partial" && "· 최근 갱신 실패"}
+          </SourceNote>
+          {data.total ? (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>의원</th>
+                    <th>지역구·비례대표</th>
+                    <th>정당</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.rows.map((m) => (
+                    <tr key={m.id}>
+                      <td>
+                        <Link href={"/members/" + m.id}>{m.name}</Link>
+                      </td>
+                      <td>{m.district}</td>
+                      <td>{m.party || "미기재"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <Empty>조건에 맞는 현직 의원이 없습니다.</Empty>
+          )}
         </>
       )}
     </>

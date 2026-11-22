@@ -9,7 +9,7 @@ import {
   Info,
   Search,
 } from "lucide-react";
-import { changeFilters, Link } from "../router";
+import { changeFilters, href, Link } from "../router";
 import { useMeta } from "../api";
 import { count, externalUrl, shortWon, won } from "../format";
 import type { Category, Month, Scope, Transaction } from "../types";
@@ -528,9 +528,11 @@ export function MonthlyChart({
 }
 export function Transactions({
   rows,
+  scope,
   showSubject = false,
 }: {
   rows: Transaction[];
+  scope?: Scope;
   showSubject?: boolean;
 }) {
   return rows.length ? (
@@ -574,11 +576,22 @@ export function Transactions({
               )}
               <td>
                 {t.merchantId ? (
-                  <Link href={"/places/" + t.merchantId}>{t.payee}</Link>
+                  <Link
+                    href={href("/places/" + t.merchantId, {
+                      mealOnly: "false",
+                      report: scope?.reportId,
+                      fundingType: t.fundingType,
+                      start: scope?.start || t.date.slice(0, 4) + "-01-01",
+                      end: scope?.end || t.date.slice(0, 4) + "-12-31",
+                    })}
+                  >
+                    {t.payee}
+                  </Link>
                 ) : (
                   t.payee || "미기재"
                 )}
                 <small>{t.description || "목적 미기재"}</small>
+                {t.payeeRegion && <small>{t.payeeRegion}</small>}
               </td>
               <td className="right numeric">
                 {won(t.amount)}
@@ -630,8 +643,8 @@ export function ReportControls({
   compact?: boolean;
 }) {
   const meta = useMeta();
-  const report = params.get("report") || meta.reports[0]?.id || "ka:2024-22";
-  const year = report.slice(3, 7);
+  const report = params.get("report") || meta.reports[0]?.id || "";
+  const year = meta.reports.find((r) => r.id === report)?.year;
   return (
     <>
       <Select

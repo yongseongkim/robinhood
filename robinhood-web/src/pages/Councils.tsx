@@ -201,7 +201,11 @@ export function Councils() {
             title="최근 집행 내역"
             description="표시된 금액은 거래 1건 금액입니다."
           >
-            <Transactions rows={data.transactions} showSubject />
+            <Transactions
+              scope={data.scope}
+              rows={data.transactions}
+              showSubject
+            />
           </Section>
           <SourceNote>
             <External url={data.council.board}>의회 공식 공개자료</External> ·

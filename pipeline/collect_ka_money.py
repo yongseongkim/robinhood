@@ -15,18 +15,10 @@ from datetime import datetime, timezone, timedelta
 import requests
 
 from common import RAW, ROOT
+from source_status import atomic_bytes, check_source
+from ka_catalog import workbook as report_workbook
 
 REPO = "OhmyNews/KA-money"
-WANTED = {
-    "2024_KAPF-21.xlsx": "2024_KAPF-21.xlsx",
-    "2024_KAPF-22.xlsx": "2024_KAPF-22.xlsx",
-    "2024_KAPF-21_수입지출.xlsx": "2024_KAPF-21_income_expense.xlsx",
-    "2024_KAPF-22_수입지출.xlsx": "2024_KAPF-22_income_expense.xlsx",
-    "2023_KAPF_수입지출.xlsx": "2023_KAPF_income_expense.xlsx",
-    "2025_KAPF.xlsx": "2025_KAPF.xlsx",
-    "2025_KAPF_수입지출.xlsx": "2025_KAPF_income_expense.xlsx",
-    "README.md": "README.md",
-}
 KST = timezone(timedelta(hours=9))
 
 
@@ -74,12 +66,13 @@ def main():
     api.raise_for_status()
     previous_path = out / 'manifest.json'
     previous = {m['filename']: m for m in json.loads(previous_path.read_text())} if previous_path.exists() else {}
-    manifest = []
+    manifest, updates = [], []
     for item in api.json():
         name = unicodedata.normalize("NFC", item["name"])
-        if name not in WANTED:
+        report = report_workbook(name)
+        if not report and name != "README.md":
             continue
-        local = out / WANTED[name]
+        local = out / (report["file"] if report else name)
         prior = previous.get(name, {})
         cached = local.read_bytes() if local.exists() else b""
         workbook = name.endswith(".xlsx")
@@ -94,9 +87,9 @@ def main():
             if workbook and not valid_workbook(data):
                 selected, data = historical_workbook(item)
                 print(f"using last valid published revision: {name}", file=sys.stderr)
-            temporary = local.with_suffix(local.suffix + ".tmp")
-            temporary.write_bytes(data)
-            temporary.replace(local)
+            if cached and intact:
+                atomic_bytes(out / "revisions" / prior["sha256"] / local.name, cached)
+            updates.append((local, data))
             print(f"downloaded {name}", file=sys.stderr)
         manifest.append({
             "filename": name,
@@ -106,8 +99,12 @@ def main():
             "local_path": str(local.relative_to(ROOT)),
             "sha256": hashlib.sha256(data).hexdigest(),
             "bytes": len(data),
-            "fetched_at": datetime.now(KST).isoformat(timespec="seconds"),
+            "fetched_at": prior.get("fetched_at") if unchanged and intact else datetime.now(KST).isoformat(timespec="seconds"),
         })
+    if not manifest or set(previous) - {m["filename"] for m in manifest}:
+        raise ValueError("불완전한 KA-money 파일 목록")
+    for local, data in updates:
+        atomic_bytes(local, data)
     temporary = out / "manifest.json.tmp"
     temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
     temporary.replace(out / "manifest.json")
@@ -115,4 +112,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    check_source("ka-money", main)

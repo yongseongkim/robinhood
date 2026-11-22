@@ -217,6 +217,35 @@ export function Sources() {
               </table>
             </div>
           </Section>
+          <Section title="출처별 확인일">
+            <KeyValues
+              rows={Object.entries({
+                roster: "현직 국회의원",
+                "bills-22": "제22대 법안",
+                "bills-21": "제21대 법안",
+                votes: "본회의 표결",
+                assets: "국회공보 정기재산",
+                peti: "공직윤리시스템 재산공개",
+                "ka-money": "정치자금 보고서",
+                "filing-totals": "국회공보 수시 재산 총계",
+              }).map(([id, label]) => {
+                const check = data.sourceChecks?.[id];
+                return [
+                  label,
+                  check
+                    ? check.checkedAt.slice(0, 10) +
+                      (check.state === "complete"
+                        ? " 확인"
+                        : " 갱신 실패 · 직전 성공 " +
+                          (check.lastSuccess?.slice(0, 10) || "미확인"))
+                    : "확인일 미상",
+                ];
+              })}
+            />
+            <External url="https://www.peti.go.kr/peOptpListVie.do">
+              공직윤리시스템 재산공개 통합 검색
+            </External>
+          </Section>
           <div className="two-columns">
             <Panel title="정치자금 자료">
               <p>

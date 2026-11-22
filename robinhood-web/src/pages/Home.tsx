@@ -1,228 +1,206 @@
-import { ArrowRight, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { query, useGeo, useResource } from "../api";
 import { changeFilters, href, Link, useLocation } from "../router";
-import { count, shortWon, won } from "../format";
+import { count, shortWon } from "../format";
 import { RegionMap } from "../components/maps";
 import {
   ButtonLink,
   Empty,
+  External,
   PageHeader,
   Panel,
   ResourceState,
   Section,
   Select,
   SourceNote,
-  Stat,
 } from "../components/ui";
 import type { Overview } from "../types";
 
 export function Home() {
   const { params } = useLocation();
   const geo = useGeo();
-  const region = params.get("region") || "서울 마포구";
+  const region = params.get("region") || "";
   const province = region.split(" ")[0];
+  const cities = (geo?.sigungu || []).filter((f) => f.sido_short === province);
+  const city = cities.find((f) => f.name === region);
+  const neighborhoods = (geo?.neighborhoods || []).filter(
+    (f) => f.municipality === city?.code,
+  );
+  const dong = neighborhoods.find((f) => f.code === params.get("dong"));
   const district = params.get("district") || "";
   const resource = useResource<Overview>("overview?" + query({ region }));
   const data = resource.data;
   if (!data) return <ResourceState {...resource} />;
-  const members = district
-    ? data.members.rows.filter((m) => m.district === district)
-    : data.members.rows;
+  const candidates = data.roster.rows.filter(
+    (m) => !dong || dong.districtCodes.includes(m.districtCode || ""),
+  );
+  const members = candidates.filter(
+    (m) => !district || m.districtCode === district || m.district === district,
+  );
   const local = data.council;
-  const city = data.cityCouncil;
-  const report = data.scope.reportId;
-  const reportLabel = data.scope.label;
-  const reportYear = data.scope.start.slice(0, 4);
-  const councilScope = local?.scope || city?.scope;
-  const councilYear = councilScope?.start.slice(0, 4);
-  const councilLabel = councilYear
-    ? councilYear + "년 수록 자료 합계"
-    : "의회 자료 미수집";
-  const boundaries =
-    province === "서울"
-      ? geo?.seoulDistricts.filter((d) =>
-          d.name.includes(region.replace(/\s/g, "").replace("서울", "")),
-        ) || []
-      : [];
+  const councilYear = local?.scope.start.slice(0, 4);
+  const selectRegion = (region: string) =>
+    changeFilters({ region, dong: "", district: "" });
   return (
     <div className="page stack">
       <PageHeader
-        title="우리 지역의 기록을 한눈에"
+        title="우리 지역 국회의원"
         context="홈 · 내 지역"
-        description="지역을 고르고 의원·의회 경비·장소 기록으로 이어집니다."
+        description="시·도와 시·군·구를 선택해 현재 지역구 의원의 지출, 신고재산과 의정활동을 확인하세요."
       />
       <div className="filters">
         <MapPin size={16} />
         <Select
           label="시·도"
           value={province}
-          options={(geo?.sido || []).map((f) => ({
-            value: f.short || f.name,
-            label: f.name,
-          }))}
-          onChange={(region) => changeFilters({ region, district: "" })}
-        />
-        {province === "서울" && (
-          <Select
-            label="시·군·구"
-            value={region}
-            options={[
-              { value: "서울", label: "서울 전체" },
-              ...(geo?.seoul || []).map((f) => ({
-                value: f.name,
-                label: f.sgg || f.name,
-              })),
-            ]}
-            onChange={(region) => changeFilters({ region, district: "" })}
-          />
-        )}
-        <Select
-          label="국회 선거구"
-          value={district}
           options={[
-            { value: "", label: "선거구 · 전체" },
-            ...data.members.rows.map((m) => ({
-              value: m.district || "",
-              label: m.district || "",
+            { value: "", label: "시·도 선택" },
+            ...(geo?.sido || []).map((f) => ({
+              value: f.short || f.name,
+              label: f.name,
             })),
           ]}
-          onChange={(district) => changeFilters({ district })}
+          onChange={selectRegion}
         />
+        {province && (
+          <Select
+            label="시·군·구"
+            value={city?.name || ""}
+            options={[
+              { value: "", label: "시·군·구 전체" },
+              ...cities.map((f) => ({ value: f.name, label: f.sgg || f.name })),
+            ]}
+            onChange={(v) => selectRegion(v || province)}
+          />
+        )}
+        {city && (
+          <Select
+            label="읍·면·동"
+            value={dong?.code || ""}
+            options={[
+              { value: "", label: "읍·면·동 전체" },
+              ...neighborhoods.map((f) => ({ value: f.code, label: f.name })),
+            ]}
+            onChange={(dong) => changeFilters({ dong, district: "" })}
+          />
+        )}
+        {province && (
+          <Select
+            label="국회 선거구"
+            value={district}
+            options={[
+              { value: "", label: "선거구 전체" },
+              ...candidates.map((m) => ({
+                value: m.districtCode || m.district,
+                label: m.district,
+              })),
+            ]}
+            onChange={(district) => changeFilters({ district })}
+          />
+        )}
       </div>
-      <div className="scope-bar">
-        <span>집계 기준</span>
-        <span>
-          국회의원: {reportLabel} · 의회 경비: {councilLabel}
-        </span>
-      </div>
-      <div className="map-steps">
-        <Panel
-          title="01  시·도 선택"
-          description="전국에서 내 지역을 찾습니다."
-        >
+      {dong && (
+        <SourceNote>
+          {dong.method === "statute"
+            ? "공직선거법 별표 1의 읍·면·동 구역과 대조한 결과입니다."
+            : "행정동 경계와 선거구 경계를 겹쳐 추정한 결과입니다."}{" "}
+          {dong.districtCodes.length !== 1 &&
+            "주소에 따라 선거구가 달라질 수 있습니다. "}
+          <External url="https://law.go.kr/LSW/flDownload.do?flSeq=163897897">
+            법정 선거구 구역표 확인
+          </External>
+        </SourceNote>
+      )}
+      <div className="two-columns">
+        <Panel title="지역 선택">
           <RegionMap
             dark
             features={geo?.sido || []}
             viewBox={geo?.projection.national.viewBox}
             selected={province}
-            onSelect={(f) =>
-              changeFilters({ region: f.short || f.name, district: "" })
-            }
+            onSelect={(f) => selectRegion(f.short || f.name)}
           />
-          <span className="map-step-label">
-            {province} <ArrowRight size={13} />
-          </span>
         </Panel>
         <Panel
-          title="02  시·군·구 선택"
+          title={region || "전국 현직 의원"}
           description={
-            province === "서울"
-              ? "서울 · 25개 자치구"
-              : "서울 지방의회부터 공개 자료를 연결합니다."
+            "열린국회정보 명부 확인 " +
+            (data.roster.asOf?.slice(0, 10) || "날짜 미확인")
           }
         >
-          {province === "서울" ? (
-            <RegionMap
-              dark
-              features={geo?.seoul || []}
-              selected={region}
-              onSelect={(f) => changeFilters({ region: f.name, district: "" })}
-            />
-          ) : (
-            <div className="map-scope-note">
-              <MapPin size={28} />
-              <p>
-                {province} 국회의원 보고자료 {count(data.members.total)}명
-              </p>
-              <ButtonLink to={href("/members", { region })}>
-                의원 목록 보기
-              </ButtonLink>
-            </div>
-          )}
-          <span className="map-step-label">{region}</span>
-        </Panel>
-        <Panel
-          title="03  국회 선거구"
-          description={region + " · 제22대 지역구"}
-        >
-          {boundaries.length ? (
+          {province && (
             <RegionMap
               dark
               autoFit
-              features={boundaries}
-              selected={district || members[0]?.district}
-              onSelect={(f) => changeFilters({ district: f.name })}
+              features={
+                city
+                  ? (geo?.districts || []).filter((f) =>
+                      candidates.some((m) => m.districtCode === f.code),
+                    )
+                  : cities
+              }
+              selected={
+                city
+                  ? candidates.find((m) => m.districtCode === district)
+                      ?.district
+                  : region
+              }
+              onSelect={(f) =>
+                city
+                  ? changeFilters({ district: f.code })
+                  : selectRegion(f.name)
+              }
             />
-          ) : (
-            <div className="map-scope-note">
-              <p>지역구를 선택해 보고자료를 확인합니다.</p>
-              <span>{count(data.members.total)}명 연결</span>
-            </div>
           )}
-          <span className="map-step-label">{district || "선거구 전체"}</span>
+          <div className="person-amount">{count(members.length)}명</div>
+          {data.roster.check?.state === "partial" && (
+            <p>최근 명부 확인에 실패해 직전 수집본을 표시합니다.</p>
+          )}
+          <ButtonLink to={href("/members", { region })}>
+            현직 의원 전체 보기
+          </ButtonLink>
         </Panel>
       </div>
-      <div className="metrics">
-        <Stat
-          accent
-          label="지역구 보고자"
-          value={count(members.length) + "명"}
-          detail={reportLabel}
-        />
-        <Stat
-          label={local ? local.council.name + " 경비" : "지역 의회 경비"}
-          value={shortWon(local?.summary.amount)}
-          exact={local?.summary.amount}
-          detail={councilLabel + " · 수록 자료 기준"}
-        />
-        <Stat
-          label="서울시의회 경비"
-          value={shortWon(city?.summary.amount)}
-          exact={city?.summary.amount}
-          detail={councilLabel + " · 수록 자료 기준"}
-        />
-        <Stat
-          label="지자체 재정수지"
-          value="자료 미수집"
-          detail="의회 경비와 지자체 전체 재정은 별도"
-        />
-      </div>
-      <Section
-        title="이 지역 국회의원"
-        description={reportLabel + " · 현재 소속과 다를 수 있습니다."}
-      >
-        {members.length ? (
-          <div className="person-grid">
-            {members.slice(0, 6).map((m) => (
-              <Panel
-                key={m.id}
-                title={m.name}
-                description={m.district + " · " + (m.party || "정당 미기재")}
-              >
-                <div className="person-amount" title={won(m.amount)}>
-                  {shortWon(m.amount)}
-                </div>
-                <p className="caption">
-                  {reportYear}년 보고분 합계 · {count(m.count)}건
-                </p>
-                <ButtonLink to={href("/members/" + m.id, { report })}>
-                  프로필 보기
-                </ButtonLink>
-              </Panel>
-            ))}
-          </div>
-        ) : (
-          <Empty>
-            선택 지역에 연결된 보고자료가 없습니다. 다른 선거구나 의원 목록에서
-            확인해 주세요.
-          </Empty>
-        )}
-      </Section>
+      {province && (
+        <Section
+          title="이 지역 국회의원"
+          description="현재 명부 기준 · 정치자금은 프로필에서 보고 연도를 선택할 수 있습니다."
+        >
+          {members.length ? (
+            <div className="person-grid">
+              {members.map((m) => (
+                <Panel
+                  key={m.id}
+                  title={m.name}
+                  description={[m.district, m.party]
+                    .filter(Boolean)
+                    .join(" · ")}
+                >
+                  <ButtonLink to={"/members/" + m.id}>프로필 보기</ButtonLink>
+                </Panel>
+              ))}
+            </div>
+          ) : (
+            <Empty>
+              선택한 범위와 연결된 현직 의원이 없습니다. 선거구 구역표를 확인해
+              주세요.
+            </Empty>
+          )}
+        </Section>
+      )}
+      {local && (
+        <Panel
+          title={local.council.name + " 경비"}
+          description={local.scope.label}
+        >
+          <div className="person-amount">{shortWon(local.summary.amount)}</div>
+        </Panel>
+      )}
       <div className="two-columns">
         <Panel
           title="직책·반기별 지출 합계 Top 3"
           description={
-            councilYear + "년 · 수록 기간과 재임 기간을 함께 확인합니다."
+            councilYear ? councilYear + "년 · 직책과 재임 기간 기준" : undefined
           }
         >
           {local?.roles.slice(0, 3).map((r, i) => (
@@ -251,7 +229,7 @@ export function Home() {
           )}
           <ButtonLink
             to={href("/councils", {
-              council: local?.council.source_id || "mapo",
+              council: local?.council.source_id,
             })}
           >
             지방의회 전체 보기
