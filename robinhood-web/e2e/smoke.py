@@ -59,12 +59,20 @@ def main():
             assert not page.evaluate('document.documentElement.scrollWidth > innerWidth'), page.url
             page.screenshot(path=str(output / (name + '.png')), full_page=True)
 
-        visit('/', '우리 지역의 기록을 한눈에')
-        expect(page.locator('.scope-bar')).to_contain_text(latest_year)
+        visit('/', '우리 지역 국회의원')
+        expect(page.get_by_label('시·도', exact=True)).to_have_value('')
         capture('home-desktop')
-        page.get_by_label('시·도', exact=True).select_option('부산')
-        expect(page.locator('main')).to_contain_text('부산 국회의원 보고자료')
-        visit('/members', '의원·정당 찾아보기')
+        page.get_by_label('시·도', exact=True).select_option('인천')
+        page.get_by_label('시·군·구', exact=True).select_option('인천 연수구')
+        page.get_by_label('읍·면·동', exact=True).select_option(label='연수1동')
+        expect(page.get_by_role('heading', name='송영길', exact=True)).to_be_visible()
+        expect(page.get_by_role('heading', name='박찬대', exact=True)).to_have_count(0)
+        page.get_by_role('link', name='프로필 보기').click()
+        expect(page.get_by_role('heading', name='송영길', exact=True)).to_be_visible()
+        page.get_by_role('tab', name='신고재산', exact=True).click()
+        expect(page.locator('main')).to_contain_text('1,363,149,000원')
+        expect(page.locator('main')).to_contain_text('2026-09-22')
+        visit('/members?view=assets', '의원·정당 찾아보기')
         expect(page.get_by_role('tab', name='재산 순위', exact=True)).to_have_attribute('aria-selected', 'true')
         expect(page.get_by_role('heading', name='신고 순재산 Top 10', exact=True)).to_be_visible()
         expect(page.locator('.member-ranking-card')).to_have_count(1)
@@ -81,7 +89,7 @@ def main():
         page.get_by_label('Top 10 정당', exact=True).select_option('국민의힘')
         expect(page.get_by_role('heading', name='국민의힘 재산 Top 10', exact=True)).to_be_visible()
         expect(page.locator('.member-ranking-card')).to_have_count(1)
-        page.get_by_role('tab', name='의원 목록', exact=True).click()
+        page.get_by_role('tab', name='회계 보고자', exact=True).click()
         page.get_by_label('정당', exact=True).select_option('더불어민주당')
         expect(page.locator('.scope-bar')).to_contain_text(latest_year)
         page.get_by_label('정당', exact=True).select_option('')
@@ -118,6 +126,11 @@ def main():
         page.get_by_role('tab', name='의회 경비', exact=True).click()
         expect(page.locator('.scope-bar')).to_contain_text(council_year)
         expect(page.locator('.scope-bar')).to_contain_text('의회운영업무추진비')
+        visit('/transactions/ka25-25_099410', '거래 상세')
+        expect(page.locator('main')).to_contain_text('대전 동구')
+        page.locator('main a[href*="mealOnly=false"]').first.click()
+        expect(page.get_by_label('거래 범위')).to_have_value('false')
+        expect(page.locator('main')).to_contain_text('131,000원')
         visit('/transactions/ka22-24_163113', '거래 상세')
         expect(page.locator('main')).to_contain_text('취소·반환')
         expect(page.locator('main')).to_contain_text('90,000원')
@@ -138,12 +151,15 @@ def main():
         expect(page).to_have_url(re.compile(r'[?&]page=2(?:&|$)'))
 
         page.set_viewport_size({'width': 390, 'height': 844})
-        for path, title, name in [('/', '우리 지역의 기록을 한눈에', 'home-mobile'),
+        for path, title, name in [('/', '우리 지역 국회의원', 'home-mobile'),
                                    ('/places', '자주 결제한 장소', 'places-mobile'),
                                    ('/members/na-279', '정청래', 'profile-mobile'),
                                    ('/fiscal', '나라 살림', 'fiscal-mobile')]:
             visit(path, title)
-            expect(page.locator('.scope-bar').first).to_be_visible()
+            if path == '/':
+                expect(page.get_by_role('link', name='현직 의원 전체 보기')).to_be_visible()
+            else:
+                expect(page.locator('.scope-bar').first).to_be_visible()
             capture(name)
         page.get_by_role('button', name='메뉴 열기').click()
         expect(page.get_by_role('navigation', name='모바일 주 메뉴')).to_be_visible()

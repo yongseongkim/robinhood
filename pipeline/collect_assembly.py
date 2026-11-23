@@ -15,6 +15,7 @@ import requests
 
 import credentials
 from common import RAW, ROOT
+from source_status import atomic_bytes, check_source
 
 BASE = "https://open.assembly.go.kr/portal/openapi/"
 KST = timezone(timedelta(hours=9))
@@ -28,8 +29,15 @@ BILL_FIELDS = ("BILL_ID", "BILL_NO", "BILL_NAME", "AGE", "COMMITTEE", "PROPOSE_D
 def fetch_all(session, key, service, fields, page_size=1000, **params):
     rows, page, total = [], 1, None
     while True:
-        r = session.get(BASE + service, params={"KEY": key, "Type": "json", "pIndex": page, "pSize": page_size, **params}, timeout=60)
-        r.raise_for_status()
+        for attempt in range(3):
+            try:
+                r = session.get(BASE + service, params={"KEY": key, "Type": "json", "pIndex": page, "pSize": page_size, **params}, timeout=45)
+                r.raise_for_status()
+                break
+            except (requests.ConnectionError, requests.Timeout):
+                if attempt == 2:
+                    raise
+                time.sleep(1 + attempt)
         body = r.json().get(service)
         if not body:
             msg = json.dumps(r.json(), ensure_ascii=False)[:200].replace(key, "***")
@@ -42,38 +50,47 @@ def fetch_all(session, key, service, fields, page_size=1000, **params):
             break
         page += 1
         time.sleep(0.3)
+    if len(rows) != total or not rows:
+        raise ValueError(f"{service}: 불완전한 수집")
+    if fields == BILL_FIELDS and len({r["BILL_ID"] for r in rows}) != total:
+        raise ValueError("중복된 법안 페이지")
     return rows, total
 
 
 def save(name, rows, service, params, total):
     OUT.mkdir(parents=True, exist_ok=True)
     data = json.dumps(rows, ensure_ascii=False).encode()
-    (OUT / f"{name}.json").write_bytes(data)
+    atomic_bytes(OUT / f"{name}.json", data)
     return {"file": f"{name}.json", "service": service, "params": params, "rows": len(rows), "list_total_count": total,
             "sha256": hashlib.sha256(data).hexdigest(), "fetched_at": datetime.now(KST).isoformat(timespec="seconds"),
             "url": BASE + service}
 
 
+def refresh(name, service, fields, **params):
+    key = credentials.get("assembly_api_key")
+    session = requests.Session()
+    session.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robinhood-collector"
+    rows, total = fetch_all(session, key, service, fields, **params)
+    manifest_path = OUT / "manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {"source": BASE, "files": []}
+    old = next((f for f in manifest["files"] if f["file"] == name + ".json"), None)
+    if name == "members_current":
+        if len({m["MONA_CD"] for m in rows if m["MONA_CD"]}) != len(rows):
+            raise ValueError("의원 코드 중복 또는 누락")
+        if old and (OUT / old["file"]).exists():
+            atomic_bytes(OUT / "rosters" / (old["fetched_at"][:10] + "-" + old["sha256"] + ".json"),
+                         (OUT / old["file"]).read_bytes())
+    entry = save(name, rows, service, params, total)
+    files = {f["file"]: f for f in manifest["files"]}
+    files[entry["file"]] = entry
+    manifest["files"] = sorted(files.values(), key=lambda f: (f["file"] != "members_current.json", f["file"]))
+    atomic_bytes(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=1).encode())
+
+
 def main():
-    try:
-        key = credentials.get("assembly_api_key")
-    except credentials.MissingCredential as e:
-        print(f"열린국회정보 수집 건너뜀: {e}", file=sys.stderr)
-        return
-    s = requests.Session()
-    s.headers["User-Agent"] = "Mozilla/5.0 (Macintosh) robinhood-collector"
-    manifest = []
-    members, total = fetch_all(s, key, "nwvrqwxyaytdsfvhu", MEMBER_FIELDS, page_size=300)
-    manifest.append(save("members_current", members, "nwvrqwxyaytdsfvhu", {}, total))
-    for age in (21, 22):
-        bills, total = fetch_all(s, key, "nzmimeepazxkubdpn", BILL_FIELDS, AGE=age)
-        manifest.append(save(f"bills_{age}", bills, "nzmimeepazxkubdpn", {"AGE": age}, total))
-    (OUT / "manifest.json").write_text(json.dumps({
-        "source": "국회사무처 열린국회정보 Open API (https://open.assembly.go.kr)",
-        "excluded_fields": ["BTH_DATE", "TEL_NO", "E_MAIL", "STAFF", "SECRETARY", "SECRETARY2", "MEM_TITLE", "ASSEM_ADDR",
-                            "ENG_NM", "SEX_GBN_NM", "BTH_GBN_NM", "PUBL_PROPOSER", "MEMBER_LIST"],
-        "files": manifest}, ensure_ascii=False, indent=1))
-    print(f"saved {len(manifest)} files to {OUT.relative_to(ROOT)}", file=sys.stderr)
+    check_source("roster", lambda: refresh("members_current", "nwvrqwxyaytdsfvhu", MEMBER_FIELDS, page_size=300))
+    for age in (22, 21):
+        check_source(f"bills-{age}", lambda: refresh(f"bills_{age}", "nzmimeepazxkubdpn", BILL_FIELDS, AGE=age))
 
 
 if __name__ == "__main__":

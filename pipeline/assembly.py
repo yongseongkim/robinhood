@@ -1,7 +1,7 @@
 """열린국회정보 의정활동(인적사항·대표발의 법률안)을 정치자금 자료의 의원(KA-money 의원번호 주체)과 연결한다.
 
 연결 기준
-- 현직(제22대): 이름 + 지역구가 같으면 연결. 지역구 표기가 달라도 이름이 현직 중 유일하면 '이름' 기준으로 연결.
+- 현직과 보관 명부는 국회의원 코드로 식별하고 회계는 이름·선거구가 함께 일치할 때 연결한다.
 - 법률안·표결: 의원 코드(MONA_CD)가 연결된 현직 의원이면 그 의원. 아니면(제21대만 지낸 의원 등)
   이름이 해당 대수 정치자금 주체 중 한 명뿐이고, 그 이름으로 나온 (연결 안 된) 의원 코드도 하나뿐일 때만 연결한다.
   이미 다른 코드로 연결된 주체에는 이름으로 붙이지 않는다 (예: 2026년 보궐로 들어온 동명이인 박지원).
@@ -13,6 +13,7 @@ import sys
 from collections import Counter, defaultdict
 
 from common import NORMALIZED, RAW
+from ka_catalog import seat_key
 
 RESULT_GROUP = {
     "원안가결": "가결", "수정가결": "가결", "대안반영폐기": "대안에 반영", "수정안반영폐기": "대안에 반영",
@@ -40,29 +41,37 @@ def result_group(r):
 
 def main():
     folder = RAW / "assembly"
-    if not (folder / "manifest.json").exists():
+    if not (folder / "members_current.json").exists():
         print("열린국회정보 자료 없음 — collect_assembly.py를 먼저 실행", file=sys.stderr)
         return
     members = json.loads((folder / "members_current.json").read_text())
-    bills = {age: json.loads((folder / f"bills_{age}.json").read_text()) for age in ("21", "22")}
+    bills = {age: json.loads((folder / f"bills_{age}.json").read_text()) for age in ("21", "22") if (folder / f"bills_{age}.json").exists()}
     subjects = [s for s in json.loads((NORMALIZED / "subjects.json").read_text()) if s["type"] == "LEGISLATOR"]
 
     # 현직 의원 ↔ 주체
     by_term = {t: [s for s in subjects if t in s.get("terms", {})] for t in ("제21대", "제22대")}
-    name_count22 = Counter(base_name(s["name"]) for s in by_term["제22대"])
-    member_name_count = Counter(m["HG_NM"] for m in members)
     code_to_sid, matched = {}, {}
+    files = {f["file"]: f for f in json.loads((folder / "manifest.json").read_text())["files"]}
+    roster_date = files["members_current.json"]["fetched_at"][:10]
+    observations = defaultdict(list)
+    for snapshot in sorted((folder / "rosters").glob("*.json")):
+        for m in json.loads(snapshot.read_text()):
+            observations[m["MONA_CD"]].append((snapshot.name[:10], m))
+    current_codes = {m["MONA_CD"] for m in members}
     for m in members:
-        cands = [s for s in by_term["제22대"] if base_name(s["name"]) == m["HG_NM"]]
-        exact = [s for s in cands if district_rest(s["terms"]["제22대"].get("district")) == district_rest(m["ORIG_NM"])]
-        if len(exact) == 1:
-            sid, how = exact[0]["id"], "이름·지역구 일치"
-        elif len(cands) == 1 and member_name_count[m["HG_NM"]] == 1:
-            sid, how = cands[0]["id"], "이름 일치(지역구 표기 다름)"
+        observations[m["MONA_CD"]].append((roster_date, m))
+    for code, history in observations.items():
+        m = history[-1][1]
+        cands = [s for s in by_term["제22대"] if base_name(s["name"]) == m["HG_NM"] and
+                 seat_key(s["terms"]["제22대"].get("district")) == seat_key(m["ORIG_NM"])]
+        if len(cands) == 1:
+            sid, how = cands[0]["id"], "이름·선거구 일치"
         else:
-            continue
+            sid, how = "mona-" + m["MONA_CD"], "국회 의원코드"
         code_to_sid[m["MONA_CD"]] = sid
-        matched[sid] = {"member": {k: m.get(k) for k in ("HG_NM", "POLY_NM", "ORIG_NM", "ELECT_GBN_NM", "CMITS", "REELE_GBN_NM",
+        field = "member" if code in current_codes else "formerMember"
+        matched[sid] = {"observations": [{"asOf": day, "district": row["ORIG_NM"], "party": row.get("POLY_NM")}
+                                          for day, row in history], field: {k: m.get(k) for k in ("MONA_CD", "HG_NM", "POLY_NM", "ORIG_NM", "ELECT_GBN_NM", "CMITS", "REELE_GBN_NM",
                                                           "UNITS", "JOB_RES_NM", "HOMEPAGE")}, "match": how}
 
     # 이름 → 의원 코드 (대수별). 한 이름에 코드가 둘 이상이면 동명이인이 있으므로 이름으로 연결하지 않는다.
@@ -79,6 +88,22 @@ def main():
                 if name and mona:
                     codes_by_name[age][name].add(mona)
                     parties_by_code[age][mona].add(party)
+
+    # A returning member may have changed seats. A unique historical member code
+    # in official roll calls and bills identifies the earlier accounting subject.
+    for code, sid in list(code_to_sid.items()):
+        if not sid.startswith("mona-"):
+            continue
+        member = matched[sid].get("member") or matched[sid]["formerMember"]
+        name = member["HG_NM"]
+        for age in ("22", "21"):
+            candidates = [s["id"] for s in by_term[f"제{age}대"] if base_name(s["name"]) == name]
+            if codes_by_name[age][name] == {code} and len(candidates) == 1 and candidates[0] not in matched:
+                target = candidates[0]
+                matched[target] = matched.pop(sid)
+                matched[target]["match"] = f"제{age}대 동일 의원코드·성명"
+                code_to_sid[code] = target
+                break
 
     linked = set(code_to_sid.values())
 
@@ -131,6 +156,7 @@ def main():
     votes = defaultdict(lambda: defaultdict(Counter))      # sid -> age -> 결과별 건수
     vote_list = defaultdict(lambda: defaultdict(list))     # sid -> age -> [(날짜, 의안명, 결과, BILL_ID)]
     vstats = Counter()
+    latest_vote = {}
     for age in ("21", "22"):
         vdir = folder / "votes" / age
         if not vdir.exists():
@@ -141,6 +167,9 @@ def main():
         for p in vdir.glob("*.json"):
             rec = json.loads(p.read_text())
             vstats[f"{age}_bills"] += 1
+            day = (rec.get("VOTE_DATE") or "")[:8]
+            if day and day > latest_vote.get(age, ""):
+                latest_vote[age] = day
             for mona, name, _party, result in rec["votes"]:
                 sid = code_to_sid.get(mona)
                 if sid is None and name and by_name_ok(age, name, mona, names, by_name):
@@ -179,7 +208,12 @@ def main():
         out[sid] = entry
     summary = {"members_current": len(members), "members_matched": len(matched), "votes": dict(vstats),
                "bills": {age: len(rows) for age, rows in bills.items()}, "attribution": dict(stats),
-               "fetched_at": json.loads((folder / "manifest.json").read_text())["files"][0]["fetched_at"]}
+               "fetched_at": files["members_current.json"]["fetched_at"]}
+    summary["members_matched"] = sum(not code_to_sid[code].startswith("mona-") for code in current_codes)
+    summary["billDates"] = {age: {"checkedAt": files[f"bills_{age}.json"]["fetched_at"],
+                                  "latest": max((b.get("PROPOSE_DT") or "" for b in rows), default=None)}
+                            for age, rows in bills.items()}
+    summary["voteDates"] = {age: f"{day[:4]}-{day[4:6]}-{day[6:8]}" for age, day in latest_vote.items()}
     (NORMALIZED / "assembly.json").write_text(json.dumps({"summary": summary, "subjects": out}, ensure_ascii=False))
     print(json.dumps(summary, ensure_ascii=False), file=sys.stderr)
     unmatched = [m["HG_NM"] + "/" + m["ORIG_NM"] for m in members if m["MONA_CD"] not in code_to_sid]

@@ -105,6 +105,14 @@ export function Transaction({ id }: { id: string }) {
                     <Link
                       href={href("/places/" + data.merchantId, {
                         fundingType: data.fundingType,
+                        mealOnly: "false",
+                        report:
+                          political &&
+                          data.docId.startsWith("ka:" + data.date?.slice(0, 4))
+                            ? data.docId
+                            : undefined,
+                        start: data.scope.start,
+                        end: data.scope.end,
                       })}
                     >
                       {data.payee}
@@ -113,6 +121,7 @@ export function Transaction({ id }: { id: string }) {
                     data.payee
                   ),
                 ],
+                ["거래에 기재된 지역", data.payeeRegion || "지역 미기재"],
                 ["날짜·시각", data.date + " " + (data.time || "(시각 미기재)")],
                 ["결제수단", data.payment],
                 ["분류", data.category],

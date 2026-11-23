@@ -57,10 +57,10 @@ React 웹은 사용자가 고른 지역·기간·정당 등에 맞춰 `/api/v1/`
 
 | 자료 | 가져오는 곳 | 수집 내용 |
 |---|---|---|
-| 국회의원 정치자금 | [오마이뉴스·경향신문·뉴스타파 공동 KA-money](https://github.com/OhmyNews/KA-money) | 2023~2024년 회계보고 XLSX. 선관위 원문을 OCR로 변환한 2차 자료 |
+| 국회의원 정치자금 | [오마이뉴스·경향신문·뉴스타파 공동 KA-money](https://github.com/OhmyNews/KA-money) | 2023년부터 발행된 회계보고 XLSX(2025년 포함). 선관위 원문을 OCR로 변환한 2차 자료 |
 | 지방의회 경비·직책 보유자 | [서울특별시의회](https://www.smc.seoul.kr/board/BoardList.do?boardTypeId=158&menuId=001007013001)와 [관악구의회](https://www.ga21c.seoul.kr/kr/costBBS.do)·[마포구의회](https://council.mapo.seoul.kr/kr/news/bbsCost.do) 등 서울 25개 구의회의 공식 홈페이지 | 업무추진비·의정운영공통경비의 PDF·엑셀, 공식 직책 선출 기록 |
 | 의원 인적사항·법안·표결 | [국회사무처 열린국회정보](https://open.assembly.go.kr) | 공적 의원 정보, 대표발의 법률안, 본회의 표결 API |
-| 신고재산 | [국회공보 정기재산공개](https://www.assembly.go.kr/portal/cnts/cntsNamgzn/gongbo.do) | 공보 원문 PDF의 재산 항목과 신고가액 |
+| 신고재산 | [국회공보 정기재산공개](https://www.assembly.go.kr/portal/cnts/cntsNamgzn/gongbo.do) | 정기공개 PDF의 재산 항목과 신고가액. [공직윤리시스템](https://www.peti.go.kr/peOptpListVie.do)의 수시공개 등록기준일·공개일을 해당 날짜 국회공보의 총계와 연결 |
 | 국가재정 | [열린재정](https://www.openfiscaldata.go.kr) | 재정수입·총지출·재정수지·국가채무 등 API |
 | 지도 경계 | [vuski/admdongkor](https://github.com/vuski/admdongkor), [오마이뉴스 선거구 지도](https://github.com/OhmyNews/2024_22_elec_map) | 통계청 SGIS 행정동 경계를 가공한 행정구역 자료와 국회의원 선거구 경계 |
 

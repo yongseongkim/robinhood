@@ -2,6 +2,7 @@ from dataclasses import replace
 from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 import json
 import os
 import sqlite3
@@ -29,6 +30,12 @@ from robinhood_server.postgres import (
     search_path,
     session,
 )
+
+
+def test_migration_versions_are_unique_across_deployment_phases():
+    directory = Path(__file__).resolve().parents[1] / "src/robinhood_server/migrations"
+    versions = [int(path.name.split("_", 1)[0]) for path in directory.rglob("*.sql")]
+    assert len(versions) == len(set(versions))
 
 
 def test_bind_markers_and_driver_values():

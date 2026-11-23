@@ -165,6 +165,17 @@ def collect(
             },
         )
         raise
+    checks = {p.stem: read_json(p, {}) for p in (config.data.parent / "raw/source-status").glob("*.json")
+              if p.stem in {"roster", "bills-21", "bills-22", "votes", "assets", "peti", "filing-totals", "ka-money"}}
+    status["sourceChecks"] = checks
+    if not no_fetch and any(v.get("state") == "partial" for v in checks.values()):
+        failures += 1
+        retry = failures <= len(retry_seconds)
+        delay = retry_seconds[failures-1] if retry else interval_hours * 3600
+        status.update(state="partial", message="일부 출처 갱신 실패 · 확인된 자료만 발행했습니다.",
+                      retryScheduled=retry, nextRunAt=(clock() + timedelta(seconds=delay)).isoformat())
+        write_status(config, status, schedule={"nextRunAt": status["nextRunAt"], "failures": failures if retry else 0})
+        return status
     status["nextRunAt"] = (clock() + timedelta(hours=interval_hours)).isoformat()
     # This write is outside the failure handler: a status-write failure must not
     # falsely claim that an already committed publication was rolled back.

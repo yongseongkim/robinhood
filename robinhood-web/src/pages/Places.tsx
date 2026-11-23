@@ -53,16 +53,26 @@ function placeFilters(params: URLSearchParams, meta: Meta) {
   };
 }
 function FundingTabs({ funding }: { funding: string }) {
+  const meta = useMeta();
   return (
     <Tabs
       value={funding}
       items={[
         { value: "POLITICAL_FUND", label: "정치자금" },
         { value: "COUNCIL_OPERATION", label: "의회 경비" },
+        ...(!["POLITICAL_FUND", "COUNCIL_OPERATION"].includes(funding)
+          ? [
+              {
+                value: funding,
+                label: meta.fundingTypes[funding]?.label || funding,
+              },
+            ]
+          : []),
       ]}
       onChange={(fundingType) =>
         changeFilters({
           fundingType,
+          report: "",
           start: "",
           end: "",
           page: "",
@@ -154,7 +164,7 @@ export function Places() {
         <RangeControls
           start={start}
           end={end}
-          onChange={(start, end) => changeFilters({ start, end })}
+          onChange={(start, end) => changeFilters({ start, end, report: "" })}
         />
         <Select
           label="장소 정렬"
@@ -283,12 +293,15 @@ export function Places() {
 export function PlaceDetail({ id }: { id: string }) {
   const { params } = useLocation();
   const { funding, start, end } = placeFilters(params, useMeta());
+  const mealOnly = params.get("mealOnly") !== "false";
   const resource = useResource<PlaceDetailData>(
     "places/" +
       encodeURIComponent(id) +
       "?" +
       query({
         fundingType: funding,
+        mealOnly: String(mealOnly),
+        report: params.get("report"),
         start,
         end,
         page: params.get("page") || 1,
@@ -312,7 +325,7 @@ export function PlaceDetail({ id }: { id: string }) {
       <Link
         className="back-link"
         href={href("/places", {
-          region: merchant.region || "서울",
+          region: merchant.region || "",
           fundingType: funding,
           start,
           end,
@@ -323,7 +336,10 @@ export function PlaceDetail({ id }: { id: string }) {
       <PageHeader
         title={merchant.name}
         context="장소 상세"
-        description={(merchant.region || "지역 미기재") + " · 공개된 식사 기록"}
+        description={
+          (merchant.region || "지역 미기재") +
+          (mealOnly ? " · 식사 기록" : " · 전체 지출 항목")
+        }
       />
       <Notice>
         가게 좌표 미확인 · 시·군·구까지만 확인됩니다. 보고 명의자가 직접
@@ -331,10 +347,19 @@ export function PlaceDetail({ id }: { id: string }) {
       </Notice>
       <div className="filters">
         <FundingTabs funding={funding} />
+        <Select
+          label="거래 범위"
+          value={String(mealOnly)}
+          options={[
+            { value: "true", label: "식사 기록" },
+            { value: "false", label: "전체 지출 항목" },
+          ]}
+          onChange={(mealOnly) => changeFilters({ mealOnly, page: "" })}
+        />
         <RangeControls
           start={start}
           end={end}
-          onChange={(start, end) => changeFilters({ start, end })}
+          onChange={(start, end) => changeFilters({ start, end, report: "" })}
         />
       </div>
       <ScopeBar scope={data.scope} />
@@ -388,7 +413,9 @@ export function PlaceDetail({ id }: { id: string }) {
                               href={href("/members/" + p.id, {
                                 report:
                                   funding === "POLITICAL_FUND"
-                                    ? p.subject.reports?.[0] || "ka:2024-22"
+                                    ? p.subject.reports?.find((r) =>
+                                        r.startsWith("ka:" + end.slice(0, 4)),
+                                      )
                                     : undefined,
                                 year: end.slice(0, 4),
                                 fundingType: funding,
@@ -409,7 +436,7 @@ export function PlaceDetail({ id }: { id: string }) {
                 </table>
               </div>
             ) : (
-              <Empty>선택 기간과 재원에 식사 기록이 없습니다.</Empty>
+              <Empty>선택한 범위에 거래 기록이 없습니다.</Empty>
             )}
             {data.payers.length > 5 && (
               <button
@@ -486,14 +513,18 @@ export function PlaceDetail({ id }: { id: string }) {
         title="출처 거래 내역"
         description="날짜와 건별 금액, 목적을 확인합니다. 금액은 각 거래 1건입니다."
       >
-        <Transactions rows={data.transactions.rows} showSubject />
+        <Transactions
+          scope={data.scope}
+          rows={data.transactions.rows}
+          showSubject
+        />
         <Pagination
           {...data.transactions}
           onChange={(page) => changeFilters({ page })}
         />
       </Section>
       <SourceNote>
-        정치자금과 의회 경비는 별도 재원으로 집계합니다. 식사 기록의 분류·상호
+        정치자금과 의회 경비는 별도 재원으로 집계합니다. 거래 기록의 분류·상호
         연결에는 오류가 있을 수 있어 인용 전 원자료를 확인해야 합니다.
       </SourceNote>
     </div>

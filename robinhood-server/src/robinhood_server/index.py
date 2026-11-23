@@ -7,12 +7,15 @@ import fcntl
 import hashlib
 import json
 import os
+import re
+from collections import defaultdict
 from pathlib import Path
 import sqlite3
 import sys
 import tempfile
 
 from .config import Settings
+from .constituency import seat_key
 
 SCHEMA = """
 CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -27,7 +30,7 @@ CREATE TABLE transactions(id TEXT PRIMARY KEY, date TEXT, month TEXT, time TEXT,
  merchant_id TEXT, funding_type TEXT NOT NULL, account TEXT, source TEXT, doc_id TEXT, row_ref TEXT,
  attendees INTEGER, payment TEXT, budget_item TEXT, flags TEXT, quality TEXT, duplicate_of TEXT,
  pair TEXT, retained_payment INTEGER, is_meal INTEGER, valid_period INTEGER, weekday TEXT, holiday TEXT,
- receipt_no TEXT, category_source TEXT);
+ receipt_no TEXT, category_source TEXT, payee_region TEXT);
 CREATE TABLE findings(id TEXT PRIMARY KEY, subject_id TEXT, funding_type TEXT, data TEXT NOT NULL);
 """
 
@@ -138,6 +141,53 @@ def _build(config):
     assets = read(source / "assets.json", {"people": [], "source": {}})
     asset_map = {v["sid"]: v for v in assets["people"] if v.get("sid")}
     assembly = read(source / "assembly.json", {"subjects": {}, "summary": {}})
+    existing = {s["id"]: s for s in subjects}
+    roster, member_aliases = [], {}
+    for sid, activity in assembly["subjects"].items():
+        m = activity.get("member") or activity.get("formerMember") or {}
+        if not m.get("MONA_CD"):
+            continue
+        entry = {"id": "mona-" + m["MONA_CD"], "subjectId": sid, "name": m["HG_NM"],
+                 "district": m["ORIG_NM"], "party": m.get("POLY_NM"),
+                 "electionType": m.get("ELECT_GBN_NM"), "seatKey": seat_key(m["ORIG_NM"])}
+        member_aliases[entry["id"]] = sid
+        if activity.get("member"):
+            roster.append(entry)
+        if sid not in existing:
+            subject = {"id": sid, "type": "LEGISLATOR", "org": "국회", "org_source": "assembly", "name": m["HG_NM"]}
+            subjects.append(subject)
+            existing[sid] = subject
+        if activity.get("member"):
+            existing[sid]["currentSeat"] = entry
+        existing[sid]["observations"] = activity.get("observations", [])
+    by_name = defaultdict(list)
+    for s in subjects:
+        if s["type"] == "LEGISLATOR":
+            by_name[re.sub(r"\(.*?\)$", "", s["name"]).strip()].append(s)
+    for person in assets["people"]:
+        candidates = by_name[person["name"]]
+        if not person.get("sid") and len(candidates) == 1:
+            person["sid"] = candidates[0]["id"]
+            asset_map[person["sid"]] = person
+    editions = read(source.parent / "raw/assets/events/gazettes.json", {})
+    for filing in read(source.parent / "raw/peti/filings.json", []):
+        if filing["kind"] != "수시":
+            continue
+        candidates = by_name[filing["name"]]
+        district = re.search(r"국회의원\(([^)]+)\)", filing["office"])
+        if district:
+            candidates = [s for s in candidates if any(seat_key(d) == seat_key(district[1]) for d in
+                [(s.get("currentSeat") or {}).get("district")] + [t.get("district") for t in s.get("terms", {}).values()])]
+        if len(candidates) != 1:
+            continue
+        details = {k:v for k,v in filing.items() if k != "id"}
+        matches = [(doc,t) for doc in editions.values() if doc["date"] == filing["published"]
+                   for t in doc["totals"] if t["name"] == filing["name"]]
+        if len(matches) == 1:
+            doc, total = matches[0]
+            details.update(amount=total["amount"], url=doc["url"] + "#page=" + str(total["totalPage"]),
+                           title=doc["title"], page=total["totalPage"])
+        candidates[0].setdefault("filings", []).append(details)
     subject_ids = {s["id"] for s in subjects}
     document_ids = {d["doc_id"] for d in documents}
     config.database.parent.mkdir(parents=True, exist_ok=True)
@@ -264,18 +314,19 @@ def _build(config):
                         e.get("holiday"),
                         e.get("receipt_no"),
                         e.get("category_source"),
+                        e.get("payee_region"),
                     )
                 )
                 if len(batch) >= 2000:
                     db.executemany(
-                        "INSERT INTO transactions VALUES(" + ",".join("?" * 31) + ")",
+                        "INSERT INTO transactions VALUES(" + ",".join("?" * 32) + ")",
                         batch,
                     )
                     total += len(batch)
                     batch.clear()
         if batch:
             db.executemany(
-                "INSERT INTO transactions VALUES(" + ",".join("?" * 31) + ")", batch
+                "INSERT INTO transactions VALUES(" + ",".join("?" * 32) + ")", batch
             )
             total += len(batch)
         if not total:
@@ -294,6 +345,12 @@ def _build(config):
         if geo_path.exists():
             js = geo_path.read_text()
             geo = json.loads(js[js.index(",") + 1 : js.rindex(")")])
+        seats = {seat_key(d["short"]): d["code"] for d in geo.get("districts", [])}
+        for m in roster:
+            m["districtCode"] = seats.get(m["seatKey"])
+        raw = source.parent / "raw"
+        checks = {f.stem: read(f, {}) for f in (raw / "source-status").glob("*.json")
+                  if f.stem in {"roster", "bills-21", "bills-22", "votes", "assets", "peti", "filing-totals", "ka-money"}}
         counts = dict(
             db.execute(
                 "SELECT funding_type,COUNT(*) FROM transactions WHERE duplicate_of IS NULL GROUP BY funding_type"
@@ -307,6 +364,9 @@ def _build(config):
             "funding": read(source / "funding_types.json", {}),
             "fiscal": read(source / "fiscal.json", {}),
             "geo": geo,
+            "roster": roster,
+            "memberAliases": member_aliases,
+            "sourceChecks": checks,
             "asset_source": assets.get("source"),
             "assembly_summary": assembly.get("summary"),
             "asset_people": assets["people"],

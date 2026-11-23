@@ -11,6 +11,8 @@ if [[ "${1:-}" != "--no-fetch" ]]; then
   $PY pipeline/collect_votes.py      # 본회의 표결: 새로 처리된 의안만 받음 (처음엔 약 1.5시간, 1초에 1회)
   $PY pipeline/collect_fiscal.py     # 열린재정 나라 살림 (openfiscal_api_key 필요, 없으면 건너뜀)
   $PY pipeline/collect_assets.py     # 국회공보 정기재산공개 PDF (최신 호만, 이미 받았으면 건너뜀)
+  $PY pipeline/collect_peti.py
+  $PY pipeline/filing_totals.py
   $PY pipeline/collect_gwanak.py
   $PY pipeline/collect_mapo.py
   $PY pipeline/collect_seoul.py
