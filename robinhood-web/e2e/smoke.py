@@ -106,6 +106,7 @@ def main():
         visit('/members?report=ka:2024-22&month=2024-06', '의원·정당 찾아보기')
         expect(page.locator('.scope-bar')).to_contain_text('2024.06.01')
         visit('/rankings', '비교·랭킹')
+        expect(page.get_by_label('비교 정당')).to_have_value('all')
         expect(page.locator('.scope-bar')).to_contain_text(latest_year)
         page.get_by_role('tab', name='지방의회', exact=True).click()
         expect(page.locator('.scope-bar')).to_contain_text('의회운영업무추진비')
@@ -136,6 +137,12 @@ def main():
         expect(page.locator('main')).to_contain_text('90,000원')
         visit('/transactions/mapo-f0a850f38629-28', '거래 상세')
         expect(page.locator('.metrics')).to_contain_text('27,500원')
+        visit('/transactions/yangcheon-a08f8a0e72a6-216', '거래 상세')
+        page.locator('main a[href*="mealOnly=false"]').first.click()
+        page.get_by_label('거래 범위').select_option('true')
+        expect(page.locator('.scope-bar')).to_contain_text('의정운영공통경비')
+        page.get_by_role('link', name='같은 재원의 지방의회 경비', exact=False).click()
+        expect(page.get_by_label('경비 재원')).to_have_value('COUNCIL_COMMON')
         visit('/fiscal?year=2024', '나라 살림')
         expect(page.locator('main')).to_contain_text('594.5조')
         page.get_by_role('tab', name='확정 예산', exact=True).click()
@@ -149,6 +156,11 @@ def main():
         expect(page.get_by_role('link', name='근거 거래 →').first).to_be_visible()
         page.get_by_role('button', name='다음 페이지', exact=True).click()
         expect(page).to_have_url(re.compile(r'[?&]page=2(?:&|$)'))
+
+        page.get_by_label('표시 범위').select_option('DISCLOSURE_GAP')
+        expect(page.get_by_role('link', name='의회 공개 게시판').first).to_be_visible()
+        expect(page.locator('main')).to_contain_text('게시글을 찾지 못한 달')
+        expect(page).not_to_have_url(re.compile(r'[?&]page=2(?:&|$)'))
 
         page.set_viewport_size({'width': 390, 'height': 844})
         for path, title, name in [('/', '우리 지역 국회의원', 'home-mobile'),

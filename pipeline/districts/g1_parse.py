@@ -7,10 +7,13 @@ import json
 import re
 import sys
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 PIPELINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PIPELINE))
+
+from common import period_range
 
 from parse_seoul import (TOTAL_RE, SUB_LABELS, canon_payment, map_header, norm, parse_amount, parse_attendees,  # noqa: E402
                          parse_date, parse_time, pdf_is_image_text, raw_rows_pdf, sheets_xlsx, split_merchant,
@@ -300,6 +303,7 @@ def parse_council(slug, cfg):
         return
     manifest = json.loads(mpath.read_text())
     out, report, seen = [], [], set()
+    coverage_dates = []
     for post in sorted(manifest, key=lambda p: (p.get("period") or "", p.get("posted_date") or "")):
         for a in post["attachments"]:
             entry = {"file": clean_filename(a["filename"]), "period": post.get("period"), "post_title": post["post_title"]}
@@ -314,7 +318,8 @@ def parse_council(slug, cfg):
             else:
                 seen.add(a["sha256"])
                 period = post.get("period") or period_of_title(clean_filename(a["filename"]))
-                ctx = {"slug": slug, "council": cfg["name"], "doc_id": f"{slug}:{a['sha256'][:12]}", "doc_title": clean_filename(a["filename"]),
+                entry.update(doc_id=f"{slug}:{a['sha256'][:12]}", period=period)
+                ctx = {"slug": slug, "council": cfg["name"], "doc_id": entry["doc_id"], "doc_title": clean_filename(a["filename"]),
                        "doc_url": a["url"], "post_url": post["post_url"], "period": period, "post_title": post["post_title"]}
                 try:
                     res, why = parse_file(ROOT / a["local_path"], ctx)
@@ -323,6 +328,10 @@ def parse_council(slug, cfg):
                 if res:
                     recs, rejected = res
                     out.extend(recs)
+                    start, end = period_range(period)
+                    end = end or post.get("posted_date") or date.today().isoformat()
+                    coverage_dates.extend(r["date"] for r in recs
+                                          if max(start or "", "2022-07-01") <= r["date"] <= end)
                     entry.update(status="parsed", rows=len(recs), amount_sum=sum(x["amount"] for x in recs),
                                  rejected_rows=rejected or None)
                 else:
@@ -339,8 +348,8 @@ def parse_council(slug, cfg):
         "board_url": cfg["base"] + (cfg.get("kr", "") + "/" + cfg["board"] + ".do" if cfg.get("board") else cfg.get("list", "/kr/data/bbs?bbs_id=businesswork")),
         "term_base_2018": 8, "formats": fmts,
         # 실제 거래 일자 기준(원문 연도 오기는 제외)
-        "collected_from": min((r["date"] for r in out if "2022-07-01" <= r["date"] <= "2026-12-31"), default=None),
-        "collected_to": max((r["date"] for r in out if "2022-07-01" <= r["date"] <= "2026-12-31"), default=None),
+        "collected_from": min(coverage_dates, default=None),
+        "collected_to": max(coverage_dates, default=None),
         "rows": len(out), "files": dict(st),
         "fields": {k: round(sum(1 for r in out if r.get(k)) / len(out), 2) if out else 0 for k in ("time", "merchant_address", "attendees")},
         "notes": cfg.get("notes", ""),

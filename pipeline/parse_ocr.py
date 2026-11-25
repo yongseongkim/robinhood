@@ -11,12 +11,14 @@ OCR로 읽은 행은 parse_confidence를 MEDIUM/LOW로만 두고, 사이트에 '
 import json
 import re
 import sys
+from collections import defaultdict
 from datetime import date
 
 import pypdfium2 as pdfium
 
-from common import RAW, ROOT, STAGING, clean_text, write_jsonl
-from ocr import ocr_image, ocr_pdf
+from common import RAW, ROOT, STAGING, clean_text, period_range, read_jsonl
+from source_status import atomic_bytes
+from ocr import ENGINE, TESSERACT, OcrUnavailable, check_engine, ocr_image, ocr_pdf
 
 OCR_REASON = re.compile(r"OCR|스캔|이미지|외곽선|도형|글자 데이터 없음")
 
@@ -42,6 +44,7 @@ ROLE_PATTERN = re.compile(r"(제\d)?부?의장|[가-힣]*위원장|[가-힣]*위
 DATE_FULL = re.compile(r"(20\d{2})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})")
 DATE_SHORT = re.compile(r"(?<!\d)(1[89]|2\d)\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})(?!\d)")  # 2자리 연도는 2018~2029만
 DATE_MD = re.compile(r"(?<!\d)(\d{1,2})\s*[-./월]\s*(\d{1,2})(?!\d)")
+PRINTED_TOTAL = re.compile(r"합계|총계|총사용금액|^계$")
 TIME = re.compile(r"^(\d{1,2})\s*[:;]\s*(\d{2})(\s*[:;]\s*\d{2})?$")  # '.'은 날짜(24.10.02)와 헷갈려 받지 않는다
 AMOUNT = re.compile(r"^-?\d{1,3}([,.]\d{3})+(원)?$|^-?\d{4,9}(원)?$")  # OCR이 쉼표를 마침표로 읽기도 한다
 PAYMENT = re.compile(r"^(신용카드|체크카드|법인카드|카드|현금|계좌이체|계좌|제로페이|지역화폐|이체)$")
@@ -234,17 +237,20 @@ def parse_pdf(path, period, known_roles=frozenset(), stats=None):
         if a:
             anchors, header_y = a, hy
         elif not anchors:
+            stats["unrecognized_pages"] = stats.get("unrecognized_pages", 0) + 1
             continue
         else:
             header_y = 0.0
         page_totals = []
+        total_labels = set()
         for b in boxes:
-            if re.search(r"합\s*계|총\s*계|총\s*사용\s*금액|사용\s*금액\s*합계|^계$", b["text"].strip()):
+            if PRINTED_TOTAL.search(re.sub(r"\s+", "", b["text"])):
                 yc0 = b["y"] + b["h"] / 2
                 same = [to_amount(p["text"]) for o in boxes if abs(o["y"] + o["h"] / 2 - yc0) < max(o["h"], b["h"]) and o["x"] > b["x"]
                         for p in split_box(o) if to_amount(p["text"]) is not None and AMOUNT.match(p["text"].replace(" ", ""))]
                 if same:
                     page_totals.append(max(same))
+                    total_labels.add(b["text"])
         if page_totals:
             printed_total = (printed_total or 0) + max(page_totals)
         body = [q for b in boxes if b["y"] > header_y - 0.002 for p in split_box(b) for q in split_across_columns(p, anchors)]
@@ -255,10 +261,14 @@ def parse_pdf(path, period, known_roles=frozenset(), stats=None):
         img = None
         parsed_rows = []
         for r in rows:
+            if any(b["text"] in total_labels for b in r):
+                continue
             cells = {k: [] for k in HEADER}
             confs = []
             for b in sorted(r, key=lambda b: b["x"]):
                 t = clean_text(b["text"]) or ""
+                if re.fullmatch(r"[₩￦\\]-?[\d,.]+", t):
+                    t = t[1:]
                 xc = b["x"] + b["w"] / 2
                 confs.append(b["conf"])
                 if DATE_FULL.search(t.replace(" ", "")) or ((DATE_SHORT.search(t) or DATE_MD.search(t)) and nearest(anchors, xc, ["date", "time", "amount", "merchant_name"]) == "date"):
@@ -315,15 +325,22 @@ def parse_pdf(path, period, known_roles=frozenset(), stats=None):
                         break
         prev = None
         for yc, cells, conf in parsed_rows:
-            d, full = parse_date(" ".join(cells["date"]), period_year, period_month)
+            date_text = " ".join(cells["date"])
+            # 주소의 번지가 날짜 칸에 붙어도 독립된 연월일을 우선한다.
+            explicit_dates = [t for t in cells["date"] if DATE_FULL.fullmatch(t) or DATE_SHORT.fullmatch(t)]
+            if len(explicit_dates) == 1:
+                date_text = explicit_dates[0]
+            d, full = parse_date(date_text, period_year, period_month)
             amt = next((to_amount(x) for x in reversed(cells["amount"]) if to_amount(x) is not None), None)
             inherited = False
             if d is None and amt is not None and prev is not None and (cells["time"] or cells["merchant_name"]):
                 if not cells["date"]:  # 날짜 칸이 비어 있음 = 같은 날짜를 병합 셀로 한 번만 적은 표
                     d, full, inherited = prev["date"], False, True
                     stats["inherited_date_rows"] += 1
-                else:
-                    stats["unreadable_date_rows"] += 1
+            if d is None and amt is not None:
+                stats["unreadable_date_rows"] += 1
+            if d and amt is None:
+                stats["missing_amount_rows"] = stats.get("missing_amount_rows", 0) + 1
             if d is None or amt is None:
                 # 날짜·금액이 없는 줄은 앞 행 칸이 줄바꿈된 것으로 본다
                 if prev is not None and not cells["amount"]:
@@ -392,7 +409,29 @@ def budget_from_title(title):
     return None
 
 
+def tesseract_review_reason(parsed, printed, period, stats):
+    if not parsed:
+        return "OCR 결과에서 표를 찾지 못함"
+    if stats.get("unrecognized_pages"):
+        return "표를 읽지 못한 페이지가 있음"
+    if printed is None:
+        return "원문 인쇄 합계를 확인할 수 없음"
+    if printed != sum(r["amount"] for r in parsed):
+        return "인쇄 합계와 추출한 행의 금액 합계가 다름"
+    if stats.get("unreadable_date_rows") or stats.get("missing_amount_rows"):
+        return "날짜 또는 금액을 읽지 못한 행이 있음"
+    start, end = period_range(period)
+    if start and any(not start <= r["date"] <= end for r in parsed):
+        return "공개 기간을 벗어난 거래일이 있음"
+    return None
+
+
 def main():
+    try:
+        check_engine()
+    except OcrUnavailable as exc:
+        print(f"OCR 건너뜀: {exc} 기존 추출 결과를 유지합니다.", file=sys.stderr)
+        return
     only = set(sys.argv[1:])
     for rp in sorted(STAGING.glob("*_parse_report.json")):
         slug = rp.name.replace("_parse_report.json", "")
@@ -403,9 +442,27 @@ def main():
         # 수집 범위(2022-07, 제9대) 밖의 과거 스캔본은 OCR 대상에서 뺀다
         todo = [f for f in files if f.get("status") == "unparsed" and OCR_REASON.search(f.get("reason") or "")
                 and (f.get("period") or "9999") >= "2022"]
-        if not todo:
+        stage = STAGING / f"{slug}_ocr.jsonl"
+        report_path = STAGING / f"{slug}_ocr_report.json"
+        if not todo and not (stage.exists() or report_path.exists()):
             continue
+        previous_rows = defaultdict(list)
+        if stage.exists():
+            for record in read_jsonl(stage):
+                previous_rows[record["doc_id"]].append(record)
+        previous_report = json.loads(report_path.read_text()) if report_path.exists() else {}
+        verified = [item for item in previous_report.get("files", [])
+                    if item.get("status") == "parsed" and item.get("total_check") == "일치"]
+        verified_by_doc = {item["doc_id"]: item for item in verified if item.get("doc_id")}
+        legacy_verified = {(item["file"], item.get("period")): item for item in verified if not item.get("doc_id")}
         manifest = json.loads((RAW / slug / "manifest.json").read_text())
+        attachments = defaultdict(list)
+        for post in manifest:
+            for att in post["attachments"]:
+                if att.get("sha256"):
+                    pair = (post, att)
+                    attachments[("doc_id", f"{slug}:{att['sha256'][:12]}")].append(pair)
+                    attachments[("file", att["filename"])].append(pair)
         known = set()
         main_staging = STAGING / f"{slug}.jsonl"
         if main_staging.exists():
@@ -419,43 +476,66 @@ def main():
         rows, report = [], []
         for f in todo:
             fname = f.get("file") or f.get("filename")
-            post = next((p for p in manifest if p["post_title"] == f.get("post_title") and any(a["filename"] == fname for a in p["attachments"])),
-                        None) or next((p for p in manifest if any(a["filename"] == fname for a in p["attachments"])), None)
-            if not post:
-                report.append({"file": fname, "status": "unparsed", "reason": "원본 목록에서 파일을 찾지 못함"})
+            doc_id = f.get("doc_id") or (f"{slug}:{f['sha256'][:12]}" if f.get("sha256") else None)
+            key = ("doc_id", doc_id) if doc_id else ("file", fname)
+            matches = [(p, a) for p, a in attachments[key]
+                       if (not f.get("post_title") or p["post_title"] == f["post_title"])
+                       and (not f.get("post_url") or p["post_url"] == f["post_url"])]
+            if not matches or len({a["sha256"] for _, a in matches}) > 1:
+                report.append({"file": fname, "period": f.get("period"), "status": "unparsed",
+                               "reason": "원본 목록에서 첨부파일을 특정할 수 없음"})
                 continue
-            att = next(a for a in post["attachments"] if a["filename"] == fname)
+            post, att = matches[0]
             path = ROOT / att["local_path"]
             if path.suffix.lower() != ".pdf":
                 report.append({"file": fname, "status": "unparsed", "reason": "PDF가 아님"})
                 continue
             period = f.get("period") or post.get("period")
+            doc_id = f"{slug}:{att['sha256'][:12]}"
             stats = {}
+            parsed, printed, reason = [], None, None
             try:
                 parsed, printed = parse_pdf(path, period, known, stats)
-            except Exception as e:  # 손상 파일 등
-                report.append({"file": fname, "period": period, "status": "unparsed", "reason": f"OCR 오류: {e}"})
-                continue
+                if ENGINE == TESSERACT:
+                    reason = tesseract_review_reason(parsed, printed, period, stats)
+                elif not parsed:
+                    reason = "OCR 결과에서 표를 찾지 못함"
+            except Exception as e:
+                reason = f"OCR 오류: {e}"
             total = sum(r["amount"] for r in parsed)
             check = None if printed is None else ("일치" if printed == total else f"불일치(인쇄 {printed:,} / 읽음 {total:,})")
+            if reason:
+                old = verified_by_doc.get(doc_id) or legacy_verified.get((fname, period), {})
+                prior = previous_rows.get(doc_id, [])
+                if (prior and len(prior) == old.get("rows")
+                        and sum(r["amount"] for r in prior) == old.get("printed_total")
+                        and old.get("period") == period):
+                    rows.extend(prior)
+                    report.append({**old, "doc_id": doc_id, "engine": old.get("engine") or previous_report.get("engine"),
+                                   "lastAttempt": {"engine": ENGINE, "reason": reason}})
+                else:
+                    report.append({"file": fname, "doc_id": doc_id, "period": period, "status": "unparsed", "reason": reason,
+                                   "candidate_rows": len(parsed), "amount_sum": total, "printed_total": printed,
+                                   "total_check": check, **stats})
+                continue
             role_t, budget_t = role_from_title(f"{post['post_title']} {fname}"), budget_from_title(f"{post['post_title']} {fname}")
             for i, r in enumerate(parsed):
                 rows.append({
-                    "source_id": slug, "council": council, "doc_id": f"{slug}:{att['sha256'][:12]}", "doc_title": fname,
+                    "source_id": slug, "council": council, "doc_id": doc_id, "doc_title": fname,
                     "doc_url": att["url"], "post_url": post["post_url"], "period": period, "row_no": i + 1,
                     "budget_item": r["budget_item"] or budget_t, "budget_item_inferred": not r["budget_item"],
                     "department": r["department"], "user_role": r["user_role"] or role_t, "date": r["date"], "time": r["time"],
                     "amount": r["amount"], "merchant_name": r["merchant_name"], "merchant_address": r["merchant_address"],
                     "purpose": r["purpose"], "attendees": r["attendees"], "payment_method": r["payment_method"],
                     "parse_confidence": "MEDIUM" if (r["parse_confidence"] == "MEDIUM" and check == "일치") else "LOW",
-                    "ocr": True, "ocr_min_conf": r["ocr_min_conf"],
+                    "ocr": True, "ocr_engine": ENGINE, "ocr_min_conf": r["ocr_min_conf"],
                 })
-            report.append({"file": fname, "period": period, "status": "parsed" if parsed else "unparsed", "rows": len(parsed), **stats,
+            report.append({"file": fname, "doc_id": doc_id, "period": period, "status": "parsed", "engine": ENGINE, "rows": len(parsed), **stats,
                            "amount_sum": total, "printed_total": printed, "total_check": check,
-                           "reason": None if parsed else "OCR 결과에서 표를 찾지 못함"})
+                           "reason": None})
             print(f"{slug} {fname[:50]}: {len(parsed)} rows, {check}", file=sys.stderr)
-        write_jsonl(STAGING / f"{slug}_ocr.jsonl", rows)
-        (STAGING / f"{slug}_ocr_report.json").write_text(json.dumps({"engine": "apple-vision", "files": report}, ensure_ascii=False, indent=1))
+        atomic_bytes(stage, "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows).encode())
+        atomic_bytes(report_path, json.dumps({"engine": ENGINE, "files": report}, ensure_ascii=False, indent=1).encode())
 
 
 if __name__ == "__main__":

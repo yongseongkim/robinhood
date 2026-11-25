@@ -24,8 +24,7 @@ $PY pipeline/parse_gwanak.py
 $PY pipeline/parse_mapo.py
 $PY pipeline/parse_seoul.py
 for g in pipeline/districts/g*.py; do [[ "$g" == *_* ]] || $PY "$g" parse; done
-# 스캔·이미지 PDF OCR (macOS Vision, 로컬 처리). 다른 OS에서는 건너뛰고 이전 결과를 쓴다.
-$PY pipeline/parse_ocr.py || echo "OCR 건너뜀: macOS Vision을 쓸 수 없음 (이전 data/staging/*_ocr.jsonl 유지)"
+$PY pipeline/parse_ocr.py
 # 서버 job이 지정한 정정 단계. 원본·OCR 추출본은 유지하고 별도 정정본만 만든다.
 if [[ -n "${ROBINHOOD_OCR_CORRECTION_PYTHON:-}" ]]; then
   "$ROBINHOOD_OCR_CORRECTION_PYTHON" -m robinhood_server.ocr_correction

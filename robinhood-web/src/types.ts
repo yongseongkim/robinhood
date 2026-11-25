@@ -204,7 +204,12 @@ export type Finding = {
   ruleId: string;
   code: string;
   explanation: string;
-  observed: Record<string, unknown>;
+  sourceId?: string;
+  observed: Record<string, unknown> & {
+    missingMonths?: string[];
+    problemFileCount?: number;
+    problemFiles?: { period?: string; filename?: string; issue?: string }[];
+  };
   evidenceIds: string[];
   reference: { type: string; value: string; description: string };
   reviewStatus: string;

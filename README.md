@@ -51,7 +51,7 @@ React 웹은 사용자가 고른 지역·기간·정당 등에 맞춰 `/api/v1/`
 
 `site/`는 가공 자료를 정적 파일로 제공하는 기존 방식입니다. 새 웹은 API로 조회하며, 서버 worker는 기존 정적 사이트 생성을 건너뜁니다. 원본·가공 데이터와 DB는 최초 배포 후 수집·가공으로 채우고 이후에는 보존하며 주기 갱신합니다. 데이터·로컬 DB·캐시는 Git에서 제외합니다. SOPS 암호문인 `credentials.yaml`과 KMS 설정인 `.sops.yaml`은 버전 관리하고, 평문 키와 실행 환경의 인증 파일은 별도로 주입합니다.
 
-현재 OCR은 macOS Vision을 사용하며 OCI/Linux OCR 어댑터는 구현 전입니다. Tesseract 설치 준비와 현재 지원 범위는 [OCR 실행 환경](docs/INSTALL.md#ocr-실행-환경)에 정리했습니다.
+스캔 PDF는 macOS에서 Apple Vision, Linux에서 Tesseract로 읽습니다. 설치 방법과 금액 검증 기준은 [OCR 실행 환경](docs/INSTALL.md#ocr-실행-환경)에 정리했습니다.
 
 ## 데이터 출처
 
