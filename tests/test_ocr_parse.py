@@ -64,7 +64,7 @@ def test_linux_ocr_requires_printed_total_and_readable_rows():
         assert tesseract_review_reason(rows, total, period, stats)
 
 
-def test_linux_ocr_retry_keeps_only_verified_rows_from_same_source(tmp_path, monkeypatch):
+def test_linux_ocr_retry_keeps_published_rows_from_same_source(tmp_path, monkeypatch):
     import json
     import parse_ocr
 
@@ -97,6 +97,21 @@ def test_linux_ocr_retry_keeps_only_verified_rows_from_same_source(tmp_path, mon
     parse_ocr.main()
     assert json.loads(stage.read_text()) == original
     assert "합계" in json.loads(report.read_text())["files"][0]["lastAttempt"]["reason"]
+
+    # 기존 Vision 원장에는 인쇄 합계가 없어 LOW로 공개된 파일도 있다.
+    original["parse_confidence"] = "LOW"
+    original.pop("ocr_engine")
+    stage.write_text(json.dumps(original) + "\n")
+    old_file = json.loads(report.read_text())["files"][0]
+    for key in ("doc_id", "engine", "lastAttempt"):
+        old_file.pop(key)
+    old_file.update(printed_total=None, total_check=None)
+    report.write_text(json.dumps({"engine": "apple-vision", "files": [old_file]}))
+    parse_ocr.main()
+    assert json.loads(stage.read_text()) == original
+    retained = json.loads(report.read_text())["files"][0]
+    assert retained["engine"] == "apple-vision" and retained["printed_total"] is None
+    assert retained["lastAttempt"]["engine"] == parse_ocr.TESSERACT
 
     attachment["sha256"] = "999999999999"
     report_file["doc_id"] = "mapo:" + attachment["sha256"]

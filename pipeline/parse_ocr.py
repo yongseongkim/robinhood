@@ -451,10 +451,9 @@ def main():
             for record in read_jsonl(stage):
                 previous_rows[record["doc_id"]].append(record)
         previous_report = json.loads(report_path.read_text()) if report_path.exists() else {}
-        verified = [item for item in previous_report.get("files", [])
-                    if item.get("status") == "parsed" and item.get("total_check") == "일치"]
-        verified_by_doc = {item["doc_id"]: item for item in verified if item.get("doc_id")}
-        legacy_verified = {(item["file"], item.get("period")): item for item in verified if not item.get("doc_id")}
+        published = [item for item in previous_report.get("files", []) if item.get("status") == "parsed"]
+        published_by_doc = {item["doc_id"]: item for item in published if item.get("doc_id")}
+        legacy_by_name = {(item["file"], item.get("period")): item for item in published if not item.get("doc_id")}
         manifest = json.loads((RAW / slug / "manifest.json").read_text())
         attachments = defaultdict(list)
         for post in manifest:
@@ -505,11 +504,11 @@ def main():
             total = sum(r["amount"] for r in parsed)
             check = None if printed is None else ("일치" if printed == total else f"불일치(인쇄 {printed:,} / 읽음 {total:,})")
             if reason:
-                old = verified_by_doc.get(doc_id) or legacy_verified.get((fname, period), {})
+                old = published_by_doc.get(doc_id) or legacy_by_name.get((fname, period), {})
                 prior = previous_rows.get(doc_id, [])
                 if (prior and len(prior) == old.get("rows")
-                        and sum(r["amount"] for r in prior) == old.get("printed_total")
-                        and old.get("period") == period):
+                        and sum(r["amount"] for r in prior) == old.get("amount_sum")
+                        and all(r.get("period") == period for r in prior) and old.get("period") == period):
                     rows.extend(prior)
                     report.append({**old, "doc_id": doc_id, "engine": old.get("engine") or previous_report.get("engine"),
                                    "lastAttempt": {"engine": ENGINE, "reason": reason}})

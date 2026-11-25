@@ -916,8 +916,10 @@ class Detector:
                 if r.get("doc_id") and attempt.get("doc_id", r["doc_id"]) != r["doc_id"]:
                     attempt = {}
                 unread = r.get("status") == "unparsed" and attempt.get("status") != "parsed"
-                if unread or r.get("duplicate_of") or r.get("rejected_rows"):
-                    issue = attempt.get("reason") or r.get("reason")
+                retry_reason = (attempt.get("lastAttempt") or {}).get("reason")
+                if unread or retry_reason or r.get("duplicate_of") or r.get("rejected_rows"):
+                    issue = (f"기존 OCR 결과 유지 · 재검증 보류({retry_reason})" if retry_reason
+                             else attempt.get("reason") or r.get("reason"))
                     if not issue:
                         if r.get("duplicate_of"):
                             issue = "같은 첨부파일이 다른 게시글에도 있음"

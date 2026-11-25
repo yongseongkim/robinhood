@@ -107,12 +107,14 @@ def test_disclosure_gap_reports_unreconciled_attachment_and_missing_month(tmp_pa
     manifest = [{"post_title": "2027년 1월"}, {"post_title": "2027년 3월"}]
     (tmp_path / "sample/manifest.json").write_text(json.dumps(manifest))
     item = {"file": "원장.pdf", "period": "2027-03", "status": "unparsed", "reason": "OCR 필요"}
-    (tmp_path / "sample_parse_report.json").write_text(json.dumps([dict(item, doc_id=k) for k in ("a", "b", "c")]))
-    attempts = [dict(item, doc_id="a", reason="금액 합계 불일치"), dict(item, doc_id="b", status="parsed")]
+    (tmp_path / "sample_parse_report.json").write_text(json.dumps([dict(item, doc_id=k) for k in ("a", "b", "c", "d")]))
+    attempts = [dict(item, doc_id="a", reason="금액 합계 불일치"), dict(item, doc_id="b", status="parsed"),
+                dict(item, doc_id="d", status="parsed", lastAttempt={"reason": "인쇄 합계 없음"})]
     (tmp_path / "sample_ocr_report.json").write_text(json.dumps({"files": attempts}))
     detector = Detector([], [], [])
     detector.disclosure_gap([])
     finding, = detector.findings
     assert finding["fundingType"] is None and finding["observed"]["missingMonths"] == ["2027-02"]
-    assert finding["observed"]["problemFileCount"] == 2
-    assert [f["issue"] for f in finding["observed"]["problemFiles"]] == ["금액 합계 불일치", "OCR 필요"]
+    assert finding["observed"]["problemFileCount"] == 3
+    assert [f["issue"] for f in finding["observed"]["problemFiles"]] == [
+        "금액 합계 불일치", "OCR 필요", "기존 OCR 결과 유지 · 재검증 보류(인쇄 합계 없음)"]

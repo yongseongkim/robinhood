@@ -45,7 +45,7 @@ Python 패키지는 `pipeline/requirements.txt`로 설치하고, OCR 엔진 같�
 | macOS | Apple Vision. Python 바인딩 `pyobjc-framework-Vision`, `pyobjc-framework-Quartz`는 requirements의 macOS 조건으로 설치 | 파이프라인에 연결됨 |
 | OCI/Linux | Tesseract CLI와 한국어 `kor`·영어 `eng` 언어 데이터 | 파이프라인에 연결됨 |
 
-Linux에서 새로 읽은 거래는 행의 금액 합계가 원문 인쇄 합계와 일치하고 날짜·금액 검사를 통과해야 집계합니다. 보류한 파일과 사유는 `data/staging/<의회>_ocr_report.json`에서 확인할 수 있습니다. 같은 원본에 대해 인쇄 합계와 대조한 기존 결과가 있으면 재인식에 실패해도 그 결과를 유지합니다.
+Linux에서 새로 읽은 거래는 행의 금액 합계가 원문 인쇄 합계와 일치하고 날짜·금액 검사를 통과해야 집계합니다. 보류한 파일과 사유는 `data/staging/<의회>_ocr_report.json`에서 확인할 수 있습니다. 재인식이 실패하면 같은 원본·기간에 이미 공개한 행을 기존 추출 보고서의 행 수·금액과 대조해 보존합니다. 해당 행에는 기존 신뢰도를 유지하고, 공개 공백 화면에 재검증 보류 사유를 표시합니다.
 
 OCI의 Ubuntu/Debian 인스턴스에서는 다음 시스템 패키지를 설치합니다. Oracle Linux 등 다른 배포판에서는 해당 OS에 맞는 패키지 관리자를 사용합니다.
 
