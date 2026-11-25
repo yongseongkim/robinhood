@@ -1,27 +1,90 @@
-"""스캔·이미지 PDF OCR (macOS Vision 프레임워크, 로컬 처리 — 외부로 전송하지 않음).
-
-- 페이지를 300dpi로 렌더링(pypdfium2) → Vision VNRecognizeTextRequest(ko-KR, en-US, 정확도 우선)
-- 결과(글자, 신뢰도, 위치)는 data/ocr/<sha256 앞 16자리>.json에 캐시한다. 원본 PDF가 같으면 다시 OCR하지 않는다.
-- 좌표는 페이지 기준 0~1 정규화, 원점은 왼쪽 위.
-"""
+"""스캔 PDF의 글자와 위치를 읽는다. 좌표는 왼쪽 위를 원점으로 한 0~1 비율이다."""
+import csv
 import hashlib
 import io
 import json
+import os
+import re
+import subprocess
 import sys
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import pypdfium2 as pdfium
-import Quartz
-import Vision
-from Foundation import NSData
 
 from common import ROOT
 
 CACHE = ROOT / "data" / "ocr"
 DPI = 300
-ENGINE = "apple-vision-accurate-ko-en-v1"
+VISION = "apple-vision-accurate-ko-en-v1"
+TESSERACT = "tesseract-kor-eng-tsv-psm11-v1"
+ENGINE = VISION if sys.platform == "darwin" else TESSERACT
+
+
+class OcrUnavailable(RuntimeError):
+    pass
+
+
+def check_engine():
+    if ENGINE == VISION:
+        try:
+            import Quartz
+            import Vision
+        except ImportError as exc:
+            raise OcrUnavailable("macOS Vision을 불러올 수 없습니다.") from exc
+    else:
+        try:
+            languages = subprocess.run(["tesseract", "--list-langs"], check=True, capture_output=True, text=True).stdout.splitlines()
+        except FileNotFoundError as exc:
+            raise OcrUnavailable("Tesseract 실행 파일이 없습니다.") from exc
+        if not {"kor", "eng"}.issubset(languages):
+            raise OcrUnavailable("Tesseract 한국어(kor)·영어(eng) 언어 데이터가 필요합니다.")
+
+
+def tesseract_boxes(image):
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    result = subprocess.run(
+        ["tesseract", "stdin", "stdout", "-l", "kor+eng", "--dpi", str(DPI), "--psm", "11", "tsv"],
+        input=buf.getvalue(), capture_output=True, check=True, timeout=120,
+        env={**os.environ, "OMP_THREAD_LIMIT": os.environ.get("OMP_THREAD_LIMIT", "1")},
+    )
+    width, height = image.size
+    boxes = []
+    previous_line = None
+    for row in csv.DictReader(io.StringIO(result.stdout.decode("utf-8")), delimiter="\t", quoting=csv.QUOTE_NONE):
+        if row["level"] != "5" or not row["text"].strip():
+            continue
+        text = row["text"].strip()
+        x, y = int(row["left"]), int(row["top"])
+        w, h = int(row["width"]), int(row["height"])
+        conf = float(row["conf"]) / 100
+        line = (row["block_num"], row["par_num"], row["line_num"])
+        # TSV가 같은 한국어 단어를 음절마다 나누기도 한다. 칸 사이 여백은 유지한다.
+        if line == previous_line and re.fullmatch(r"[가-힣]+", text):
+            prev = boxes[-1]
+            gap = x - (prev["x"] + prev["w"])
+            if re.fullmatch(r"[가-힣 ]+", prev["text"]) and gap <= min(h, prev["h"]):
+                prev["text"] += (" " if gap > 0.4 * h else "") + text
+                left, top = min(x, prev["x"]), min(y, prev["y"])
+                prev.update(w=max(x + w, prev["x"] + prev["w"]) - left,
+                            h=max(y + h, prev["y"] + prev["h"]) - top,
+                            x=left, y=top, conf=min(conf, prev["conf"]))
+                continue
+        previous_line = line
+        boxes.append({"text": text, "conf": conf, "x": x, "y": y, "w": w, "h": h})
+    for box in boxes:
+        box["x"] /= width
+        box["w"] /= width
+        box["y"] /= height
+        box["h"] /= height
+    return boxes
 
 
 def _cgimage(pil_image):
+    import Quartz
+    from Foundation import NSData
+
     buf = io.BytesIO()
     pil_image.save(buf, format="PNG")
     data = NSData.dataWithBytes_length_(buf.getvalue(), len(buf.getvalue()))
@@ -30,6 +93,10 @@ def _cgimage(pil_image):
 
 
 def ocr_image(pil_image):
+    if ENGINE == TESSERACT:
+        return tesseract_boxes(pil_image)
+    import Vision
+
     req = Vision.VNRecognizeTextRequest.alloc().init()
     req.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
     req.setRecognitionLanguages_(["ko-KR", "en-US"])
@@ -57,10 +124,11 @@ def ocr_pdf(path, force=False):
     """PDF 전체를 OCR한다. {'engine', 'dpi', 'pages': [{'width', 'height', 'boxes': [...]}]}"""
     raw = path.read_bytes()
     sha = hashlib.sha256(raw).hexdigest()
-    cache = CACHE / f"{sha[:16]}.json"
+    directory = CACHE if ENGINE == VISION else CACHE / ENGINE
+    cache = directory / f"{sha[:16]}.json"
     if cache.exists() and not force:
         cached = json.loads(cache.read_text())
-        if cached.get("engine") == ENGINE:
+        if cached.get("engine") == ENGINE and cached.get("sha256") == sha and cached.get("dpi") == DPI:
             return cached
     pdf = pdfium.PdfDocument(raw)
     pages = []
@@ -69,13 +137,14 @@ def ocr_pdf(path, force=False):
         img = page.render(scale=DPI / 72).to_pil()
         pages.append({"width": img.width, "height": img.height, "boxes": ocr_image(img)})
     result = {"engine": ENGINE, "dpi": DPI, "sha256": sha, "source": str(path.relative_to(ROOT)), "pages": pages}
-    CACHE.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps(result, ensure_ascii=False))
+    directory.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile(mode="w", encoding="utf-8", dir=directory, delete=False) as temp:
+        json.dump(result, temp, ensure_ascii=False)
+    Path(temp.name).replace(cache)
     return result
 
 
 if __name__ == "__main__":
-    from pathlib import Path
     res = ocr_pdf(Path(sys.argv[1]).resolve(), force="--force" in sys.argv)
     for p in res["pages"][:1]:
         for b in sorted(p["boxes"], key=lambda b: (round(b["y"], 2), b["x"]))[:80]:

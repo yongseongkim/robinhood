@@ -259,7 +259,7 @@ def create_app(config: Settings = settings):
         if report and funding != "POLITICAL_FUND":
             raise ValueError("정치자금 보고서는 정치자금 재원에서만 선택할 수 있습니다.")
         scope = (repo.report_scope(report, start.isoformat() if start else None, end.isoformat() if end else None)
-                 if report else place_scope(repo, funding, start, end, detail=not meal_only))
+                 if report else place_scope(repo, funding, start, end, detail=True))
         return repo.place(mid, scope, page, meal_only)
 
     @app.get("/api/v1/transactions")
@@ -320,10 +320,11 @@ def create_app(config: Settings = settings):
         q: str = Query("", max_length=100),
         page: int = Query(1, ge=1),
         page_size: int = Query(30, alias="pageSize", ge=1, le=100),
+        rule_id: str = Query("", alias="ruleId", max_length=100),
     ):
         if funding and funding not in FUNDS:
             raise ValueError("지원하지 않는 재원입니다.")
-        return repo.findings_page(subject_id, funding, q, page, page_size)
+        return repo.findings_page(subject_id, funding, q, page, page_size, rule_id=rule_id)
 
     @app.get("/api/v1/jobs/status")
     def job_status():

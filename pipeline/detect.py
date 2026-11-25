@@ -906,17 +906,35 @@ class Detector:
             if isinstance(report, dict):
                 report = report.get("files", [])
             ocr_rep = STAGING / f"{src}_ocr_report.json"
-            ocr_done = {f.get("file") for f in json.loads(ocr_rep.read_text()).get("files", []) if f.get("status") == "parsed"} if ocr_rep.exists() else set()
-            problems = [r for r in report if (r.get("status") == "unparsed" and (r.get("filename") or r.get("file")) not in ocr_done)
-                        or r.get("duplicate_of") or r.get("rejected_rows")]
+            ocr_files = json.loads(ocr_rep.read_text()).get("files", []) if ocr_rep.exists() else []
+            ocr_by_doc = {f["doc_id"]: f for f in ocr_files if f.get("doc_id")}
+            ocr_by_name = {(f["file"], f.get("period")): f for f in ocr_files}
+            problems = []
+            for r in report:
+                filename = r.get("filename") or r.get("file")
+                attempt = ocr_by_doc.get(r.get("doc_id")) or ocr_by_name.get((filename, r.get("period")), {})
+                if r.get("doc_id") and attempt.get("doc_id", r["doc_id"]) != r["doc_id"]:
+                    attempt = {}
+                unread = r.get("status") == "unparsed" and attempt.get("status") != "parsed"
+                retry_reason = (attempt.get("lastAttempt") or {}).get("reason")
+                if unread or retry_reason or r.get("duplicate_of") or r.get("rejected_rows"):
+                    issue = (f"기존 OCR 결과 유지 · 재검증 보류({retry_reason})" if retry_reason
+                             else attempt.get("reason") or r.get("reason"))
+                    if not issue:
+                        if r.get("duplicate_of"):
+                            issue = "같은 첨부파일이 다른 게시글에도 있음"
+                        elif r.get("rejected_rows"):
+                            issue = "날짜·금액 오류로 제외된 행 있음"
+                        else:
+                            issue = "첨부파일을 읽지 못함"
+                    problems.append({"period": r.get("period"), "filename": filename, "issue": issue,
+                                     "rejectedRows": n_rejected(r)})
             if not missing and not problems:
                 continue
             self.add(
                 "DISCLOSURE_GAP", f"org-{src}", src, [],
                 observed={"firstMonth": first, "lastMonth": last, "missingMonths": missing,
-                          "problemFiles": [{"period": r.get("period"), "filename": r.get("filename") or r.get("file"),
-                                            "issue": r.get("reason") or ("날짜 오류로 제외된 행 있음" if r.get("rejected_rows") else None),
-                                            "rejectedRows": n_rejected(r)} for r in problems][:50]},
+                          "problemFiles": problems[:50], "problemFileCount": len(problems)},
                 reference={"type": "DISCLOSURE", "description": "게시판 첫 공개 월~최근 월의 월별 공개 여부와 첨부 상태"},
                 explanation=f"{name} 업무추진비 게시판({first}~{last})에서 공개 게시글이 없는 달이 {len(missing)}개, "
                             f"문제가 있는 첨부가 {len(problems)}건 있습니다. 훈령상 공개는 최소 분기 단위의 노력 의무이므로 위반을 뜻하지 않습니다.",

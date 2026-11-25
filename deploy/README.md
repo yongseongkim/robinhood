@@ -2,7 +2,7 @@
 
 기존 메인 DB 안의 `robinhood` 전용 스키마를 사용합니다. 이 문서는 운영 계정·환경 파일·권한·서비스 활성화를 설명합니다. 공통 의존성과 로컬 실행은 [설치 안내](../docs/INSTALL.md)를 따릅니다. 저장소의 서비스 파일은 배포 템플릿이며 실제 활성화는 운영 환경에서 수행합니다.
 
-현재 OCI/Linux에서 새 스캔 PDF를 OCR로 처리하는 어댑터는 미구현입니다. API와 일반 자료 수집을 배포하는 단계와 스캔 자료까지 포함한 전체 수집 준비를 구분합니다. 지원 상태는 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 있습니다.
+Linux worker는 Tesseract로 스캔 PDF를 처리합니다. 설치·검증 기준은 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 있습니다.
 
 ## Homelab k3s 배포
 
@@ -41,7 +41,7 @@ worker는 `/storage/data`, `/storage/site-data`, `/storage/var`를 영구 볼륨
 기존 서버 경로 계산을 위해 이미지의 소스 구조와 `PYTHONPATH`를 유지합니다.
 
 ARM64 worker는 시스템 Chromium을 사용합니다. 다른 환경도 `ROBINHOOD_BROWSER_EXECUTABLE`에 실행 파일 경로를 지정할 수 있고, 미지정 시 기존 Chrome channel을 사용합니다.
-이미지에 Tesseract와 한국어·영어 데이터를 설치하지만 Linux OCR 어댑터는 아직 없습니다.
+worker 이미지에 Tesseract와 한국어·영어 언어 데이터를 포함합니다.
 AI OCR 정정은 Helm 배포에서 꺼져 있습니다.
 
 API readiness는 `/api/health`를 사용해 최초 발행 전에는 실패합니다. startup·liveness는 DB와 무관한 `/api/openapi.json`을 사용합니다.
@@ -102,9 +102,9 @@ uv run --project robinhood-server --env-file /etc/robinhood/worker.env robinhood
 
 `collect`가 기관별 자료와 없는 지도 원본을 가져와 파싱·정규화·검증 후 DB에 반영합니다. 최초 발행 전까지 API 준비 상태는 503입니다. 이후 코드 재배포에서는 DB와 데이터 볼륨을 유지하며 worker가 주기 갱신합니다.
 
-강북구 자료 수집에는 설치된 Chrome이 필요합니다. Linux에서는 macOS Vision OCR이 실행되지 않아 기존 OCR 결과가 있을 때만 유지할 수 있습니다. 새 스캔본까지 처음부터 처리하려면 macOS 수집 호스트를 사용하거나 별도 OCR 엔진을 추가해야 합니다.
+강북구 자료 수집에는 설치된 Chrome이 필요합니다.
 
-OCI/Linux의 Tesseract 시스템 패키지·한국어/영어 언어 데이터 설치와 현재 어댑터 구현 상태는 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 기록했습니다.
+OCI/Linux의 Tesseract 시스템 패키지와 한국어·영어 언어 데이터 설치 방법은 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 기록했습니다.
 
 ## Linux 상시 실행
 

@@ -421,7 +421,7 @@ class Repository:
         ).fetchone()
         return json.loads(row[0]) if row else None
 
-    def finding_filter(self, subject_id="", funding="", q="", evidence_id=""):
+    def finding_filter(self, subject_id="", funding="", q="", evidence_id="", rule_id=""):
         conditions, args = ["1=1"], []
         if subject_id:
             conditions.append("subject_id=?")
@@ -432,6 +432,9 @@ class Repository:
         if q:
             conditions.append("CAST(data AS TEXT) LIKE ? ESCAPE '\\'")
             args.append(escaped_like(q))
+        if rule_id:
+            conditions.append("data->>'ruleId'=?")
+            args.append(rule_id)
         if evidence_id:
             conditions.append(
                 f"EXISTS (SELECT 1 FROM {array_values(self.db, 'findings.data', 'evidenceIds')} WHERE value=?)"
@@ -439,14 +442,14 @@ class Repository:
             args.append(evidence_id)
         return " AND ".join(conditions), args
 
-    def findings_page(self, subject_id="", funding="", q="", page=1, page_size=30):
-        where, args = self.finding_filter(subject_id, funding, q)
+    def findings_page(self, subject_id="", funding="", q="", page=1, page_size=30, *, rule_id=""):
+        where, args = self.finding_filter(subject_id, funding, q, rule_id=rule_id)
         total = self.db.execute(
             "SELECT COUNT(*) FROM findings WHERE " + where, args
         ).fetchone()[0]
         return {
             "rows": self.findings(
-                subject_id, funding, q, page_size, (page - 1) * page_size
+                subject_id, funding, q, page_size, (page - 1) * page_size, rule_id=rule_id
             ),
             "total": total,
             "page": page,
@@ -455,9 +458,9 @@ class Repository:
         }
 
     def findings(
-        self, subject_id="", funding="", q="", limit=30, offset=0, evidence_id=""
+        self, subject_id="", funding="", q="", limit=30, offset=0, evidence_id="", rule_id=""
     ):
-        where, args = self.finding_filter(subject_id, funding, q, evidence_id)
+        where, args = self.finding_filter(subject_id, funding, q, evidence_id, rule_id)
         rows = records(
             self.db,
             "SELECT data FROM findings WHERE "

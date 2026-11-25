@@ -46,7 +46,8 @@ export function Sources() {
   const { params } = useLocation();
   const tab = params.get("tab") || "data";
   const [q, setQ] = useState("");
-  const funding = params.get("fundingType") || "COUNCIL_OPERATION";
+  const funding = params.get("fundingType") || "";
+  const gapsOnly = params.get("ruleId") === "DISCLOSURE_GAP";
   const page = Number(params.get("page")) || 1;
   const findings = useResource<{
     rows: Finding[];
@@ -55,7 +56,13 @@ export function Sources() {
     pageSize: number;
   }>(
     tab === "findings"
-      ? "findings?" + query({ fundingType: funding, q, page })
+      ? "findings?" +
+          query({
+            fundingType: gapsOnly ? "" : funding,
+            ruleId: gapsOnly ? "DISCLOSURE_GAP" : "",
+            q,
+            page,
+          })
       : null,
   );
   if (!data) return <ResourceState {...resource} />;
@@ -360,13 +367,22 @@ export function Sources() {
           </Notice>
           <div className="filters">
             <Select
-              label="표시 재원"
-              value={funding}
-              options={Object.entries(meta.fundingTypes).map(([value, f]) => ({
-                value,
-                label: f.label,
-              }))}
-              onChange={(fundingType) => changeFilters({ fundingType })}
+              label="표시 범위"
+              value={gapsOnly ? "DISCLOSURE_GAP" : funding}
+              options={[
+                { value: "", label: "전체 표시" },
+                { value: "DISCLOSURE_GAP", label: "자료 공개 공백" },
+                ...Object.entries(meta.fundingTypes).map(([value, f]) => ({
+                  value,
+                  label: f.label,
+                })),
+              ]}
+              onChange={(value) =>
+                changeFilters({
+                  fundingType: value === "DISCLOSURE_GAP" ? "" : value,
+                  ruleId: value === "DISCLOSURE_GAP" ? value : "",
+                })
+              }
             />
             <SearchForm
               value={q}
@@ -390,6 +406,15 @@ export function Sources() {
                 description="자동 표시 · 맥락 확인 필요"
               >
                 <p>{f.explanation}</p>
+                {f.ruleId === "DISCLOSURE_GAP" && (
+                  <DisclosureGap
+                    finding={f}
+                    board={
+                      meta.councils.find((c) => c.source_id === f.sourceId)
+                        ?.board
+                    }
+                  />
+                )}
                 <KeyValues
                   rows={Object.entries(f.observed)
                     .filter(
@@ -434,5 +459,40 @@ export function Sources() {
         검토 상태를 구분합니다.
       </SourceNote>
     </div>
+  );
+}
+
+function DisclosureGap({
+  finding,
+  board,
+}: {
+  finding: Finding;
+  board?: string;
+}) {
+  const { missingMonths, problemFiles, problemFileCount } = finding.observed;
+  return (
+    <>
+      <p>게시글을 찾지 못한 달 · {missingMonths?.join(", ") || "없음"}</p>
+      {!!problemFiles?.length && (
+        <details>
+          <summary>
+            확인할 첨부파일 {count(problemFiles.length)}개 보기
+            {problemFileCount && problemFileCount > problemFiles.length
+              ? ` (전체 ${count(problemFileCount)}개)`
+              : ""}
+          </summary>
+          <ul>
+            {problemFiles.map((file, i) => (
+              <li key={i}>
+                {[file.period, file.filename, file.issue]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {board && <External url={board}>의회 공개 게시판</External>}
+    </>
   );
 }

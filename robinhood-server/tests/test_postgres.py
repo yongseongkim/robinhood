@@ -228,6 +228,9 @@ def test_postgres_council_findings_preserve_scope_and_subject_integrity(pg_confi
     api = TestClient(create_app(pg_config))
     assert api.get("/api/health").status_code == 200
     page = api.get("/api/v1/findings", params={"subjectId": "org-mapo"}).json()
+    gaps = api.get("/api/v1/findings", params={"ruleId": "DISCLOSURE_GAP"}).json()
+    assert gaps["total"] == 1 and gaps["rows"] == page["rows"]
+    assert api.get("/api/v1/findings", params={"ruleId": "DISCLOSURE_GAP", "fundingType": "COUNCIL_OPERATION"}).json()["total"] == 0
     assert page["total"] == 1
     assert page["rows"][0]["subjectId"] == "org-mapo"
     assert page["rows"][0]["observed"] == council_finding["observed"]

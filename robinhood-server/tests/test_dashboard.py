@@ -49,6 +49,16 @@ def test_funding_duplicates_refunds_and_source_names(client):
     assert local["summary"]["monthlyAverage"] == 30000
     common = client.get("/api/v1/councils/mapo?fundingType=COUNCIL_COMMON").json()
     assert common["summary"]["amount"] == 80000
+    mid = public_merchant_id("b1071638735")
+    for meal_only in ("true", "false"):
+        detail = client.get("/api/v1/places/" + mid, params={"fundingType": "COUNCIL_COMMON", "mealOnly": meal_only,
+                                                            "start": "2024-05-01", "end": "2024-05-31"})
+        assert detail.status_code == 200
+        data = detail.json()
+        assert data["scope"]["fundingType"] == "COUNCIL_COMMON"
+        assert data["summary"]["amount"] == (None if meal_only == "true" else 80000)
+        ids = [row["id"] for row in data["transactions"]["rows"]]
+        assert ids == ([] if meal_only == "true" else ["common"])
     tx = client.get("/api/v1/transactions/local").json()
     assert tx["perPerson"] == 10000 and tx["time"] == "12:30"
     private = client.get("/api/v1/transactions/private").json()

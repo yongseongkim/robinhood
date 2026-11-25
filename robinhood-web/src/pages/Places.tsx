@@ -322,17 +322,29 @@ export function PlaceDetail({ id }: { id: string }) {
   const aggregate = periodLabel(data.scope);
   return (
     <div className="page stack merchant-page">
-      <Link
-        className="back-link"
-        href={href("/places", {
-          region: merchant.region || "",
-          fundingType: funding,
-          start,
-          end,
-        })}
-      >
-        ← 지역 지도
-      </Link>
+      {["POLITICAL_FUND", "COUNCIL_OPERATION"].includes(funding) ? (
+        <Link
+          className="back-link"
+          href={href("/places", {
+            region: merchant.region || "",
+            fundingType: funding,
+            start,
+            end,
+          })}
+        >
+          ← 지역 지도
+        </Link>
+      ) : (
+        <Link
+          className="back-link"
+          href={href("/councils", {
+            fundingType: funding,
+            year: start.slice(0, 4),
+          })}
+        >
+          ← 같은 재원의 지방의회 경비
+        </Link>
+      )}
       <PageHeader
         title={merchant.name}
         context="장소 상세"

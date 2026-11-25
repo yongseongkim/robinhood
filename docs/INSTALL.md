@@ -4,7 +4,7 @@
 
 이 문서의 설치·최초 적재·로컬 실행 절차를 공통 안내로 사용합니다. 운영 권한과 서비스 활성화는 [배포 안내](../deploy/README.md), 서버의 저장·갱신 정책은 [서버 안내](../robinhood-server/README.md)에 있습니다.
 
-현재 Linux에서 API·일반 자료 수집은 실행할 수 있지만, 새 스캔 PDF의 OCR은 macOS Vision 구현에 의존합니다. 아래 Tesseract 설치 절차는 Linux 연동을 위한 준비이며, OCI에서 모든 스캔 자료까지 처리하는 수집 환경은 아직 완성되지 않았습니다.
+Linux worker는 Tesseract로 새 스캔 PDF를 읽습니다. 저장소의 worker 이미지에는 필요한 언어 데이터가 들어 있습니다.
 
 ## 필요한 환경
 
@@ -43,9 +43,9 @@ Python 패키지는 `pipeline/requirements.txt`로 설치하고, OCR 엔진 같�
 | 실행 환경 | OCR 엔진과 시스템 의존성 | 현재 연동 상태 |
 |---|---|---|
 | macOS | Apple Vision. Python 바인딩 `pyobjc-framework-Vision`, `pyobjc-framework-Quartz`는 requirements의 macOS 조건으로 설치 | 파이프라인에 연결됨 |
-| OCI/Linux | Tesseract CLI와 한국어 `kor`·영어 `eng` 언어 데이터 | 어댑터 구현 전. 설치만으로 현재 파이프라인의 Linux OCR이 활성화되지는 않음 |
+| OCI/Linux | Tesseract CLI와 한국어 `kor`·영어 `eng` 언어 데이터 | 파이프라인에 연결됨 |
 
-현재 `pipeline/ocr.py`는 Apple Vision을 직접 호출합니다. Linux에서 새 스캔 PDF를 처리하려면 Tesseract 출력을 기존 문자·좌표·신뢰도 형식에 맞추는 어댑터와 실제 표의 금액·행 검증이 추가로 필요합니다. 아래 명령은 그 연동을 위한 실행 환경 준비입니다.
+Linux에서 새로 읽은 거래는 행의 금액 합계가 원문 인쇄 합계와 일치하고 날짜·금액 검사를 통과해야 집계합니다. 보류한 파일과 사유는 `data/staging/<의회>_ocr_report.json`에서 확인할 수 있습니다. 재인식이 실패하면 같은 원본·기간에 이미 공개한 행을 기존 추출 보고서의 행 수·금액과 대조해 보존합니다. 해당 행에는 기존 신뢰도를 유지하고, 공개 공백 화면에 재검증 보류 사유를 표시합니다.
 
 OCI의 Ubuntu/Debian 인스턴스에서는 다음 시스템 패키지를 설치합니다. Oracle Linux 등 다른 배포판에서는 해당 OS에 맞는 패키지 관리자를 사용합니다.
 
@@ -112,7 +112,7 @@ uv run --env-file .env robinhood migrate
 uv run --env-file .env robinhood collect
 ```
 
-이후 배포에서는 DB와 `data/` 볼륨을 유지하고 worker가 주기적으로 갱신합니다. 이미 받은 원본으로 다시 가공하려면 `collect --no-fetch`, 정규화 자료를 조회 DB에 다시 적재하려면 `index`를 사용합니다. 실제 갱신 범위와 출처별 조건은 [서버 안내](../robinhood-server/README.md)에 있습니다. 새 스캔 문서를 모두 처리하려면 macOS OCR 수집 환경이 필요합니다.
+이후 배포에서는 DB와 `data/` 볼륨을 유지하고 worker가 주기적으로 갱신합니다. 이미 받은 원본으로 다시 가공하려면 `collect --no-fetch`, 정규화 자료를 조회 DB에 다시 적재하려면 `index`를 사용합니다. 실제 갱신 범위와 출처별 조건은 [서버 안내](../robinhood-server/README.md)에 있습니다.
 
 ## 로컬 웹과 API
 
