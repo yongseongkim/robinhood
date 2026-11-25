@@ -1,8 +1,8 @@
-"""관악구의회 업무추진비 XLSX 파서 → data/staging/gwanak.jsonl
+"""관악구의회 업무추진비 엑셀에서 거래를 읽어 data/staging/gwanak.jsonl에 기록한다.
 
-- 헤더 행('연번')과 그 아래 보조 헤더('일자/시간/상호명/주소')를 합쳐 열 이름을 만든 뒤 이름으로 매핑한다.
-- '참석자 명단' 파일은 개인 성명이 포함되어 파싱하지 않는다 (참석 인원은 본 집행내역의 '대상인원수' 사용).
-- HWP 등 파싱 불가 파일은 보고서에 사유와 함께 남긴다.
+‘연번’이 있는 머리글과 아래의 보조 머리글(일자·시간·상호명·주소)을 합쳐 열 이름을 찾는다.
+참석자 명단에는 개인 성명이 있어 읽지 않고, 인원수는 집행 내역의 ‘대상인원수’에서 가져온다.
+HWP 등 읽을 수 없는 파일은 사유와 함께 파싱 보고서에 남긴다.
 """
 import json
 import re
@@ -208,7 +208,7 @@ def main():
         post["period"] = parse_period(post["post_title"])
     rows, report = [], []
     seen_sha = {}
-    # 오래된 게시글부터: 같은 파일이 나중 게시글에 다시 첨부된 경우 최초 게시글에 귀속
+    # 같은 첨부가 여러 게시글에 실리면 최초 게시글에 귀속하도록 오래된 게시글부터 읽는다.
     for post in sorted(manifest, key=lambda p: (p["period"] or "", p["posted_date"] or "")):
         for att in post["attachments"]:
             fn = att["filename"]

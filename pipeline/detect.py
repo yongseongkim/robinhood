@@ -310,7 +310,8 @@ class Detector:
             amts = sorted(e["amount"] for e in items)
             crosses = sum(amts) >= 500000 and amts[-1] < 500000
             if amts[0] / amts[-1] < 0.5 and not crosses:
-                continue  # 큰 결제 뒤의 소액 추가 주문은 분할 결제 패턴이 아니다
+                continue  # 소액 추가 주문까지 표시하지 않도록 최소 결제가 최대 결제의 절반 미만이면 제외한다.
+                # 단, 각 결제가 50만 원 미만이고 합계가 50만 원 이상이면 비교 대상에 남긴다.
             times = sorted(e["time"] for e in items if e.get("time"))
             if len(times) == len(items):
                 mins = [int(t[:2]) * 60 + int(t[3:]) for t in times]
@@ -606,7 +607,7 @@ class Detector:
         for sid, rows in self.by_subject.items():
             s = self.subjects.get(sid)
             if not s or s["type"] != "COUNCIL_ROLE" or REGISTRY.get(s.get("org_source"), {}).get("level") != "기초":
-                continue  # 광역의회(서울시의회)는 예산 규모가 달라 구의회와 같은 줄에 세우지 않는다
+                continue  # 예산 규모가 다른 광역의회는 구의회 직책별 월평균 비교에서 제외한다.
             label = next((g for g, rx in self.ROLE_GROUP if rx.search(s.get("role") or "")), None)
             if not label or "예산결산" in (s.get("role") or ""):
                 continue

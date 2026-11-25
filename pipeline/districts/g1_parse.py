@@ -94,7 +94,7 @@ COMMITTEE_STEM = re.compile(r"^(의회운영|운영|행정|재경|재무|기획|
 
 
 def clean_role(cell, fallback):
-    """사용자 칸: 직책이면 그대로, '의장 홍길동'이면 직책만, 사람 이름만이면 제목의 직책으로."""
+    """사용자 칸에서 직책을 고른다. ‘의장 홍길동’은 ‘의장’으로 읽고, 성명만 적혀 있으면 제목에서 찾은 직책을 쓴다."""
     v = norm(cell)
     if not v:
         return fallback, False
@@ -230,7 +230,7 @@ def rows_to_records(rows, ctx):
 
 
 def sniff(path):
-    """확장자가 아니라 파일 내용으로 형식을 판정한다 (일부 게시판은 파일명이 깨져 있음)."""
+    """일부 게시판은 첨부 파일명이 깨지므로 파일 내용으로 형식을 판별한다."""
     head = path.read_bytes()[:8]
     if head.startswith(b"%PDF"):
         return ".pdf"

@@ -1,12 +1,10 @@
-"""서울특별시의회 직책 보유자(의장단·상임위원장·예결위원장·교섭단체 대표의원) 수집기.
+"""서울특별시의회 공식 홈페이지(https://www.smc.seoul.kr)에서 직책 보유자의 선출 근거를 수집한다.
 
-서울특별시의회 공식 홈페이지(https://www.smc.seoul.kr)만 근거로 쓴다.
-- 역대의장단·의장단 구성·교섭단체 대표 페이지, 그리고 의회 보도자료 게시판(boardTypeId=66)의
-  선출 보도자료 본문과 첨부 PDF.
-- 가져온 원문은 data/raw/roles_seoul/<sha256 앞 12자리>_<이름>.<html|pdf> 로 그대로 보관하고
-  manifest.json 에 URL·sha256·수집 시각을 기록한다.
-- 각 기록은 원문에서 정규식으로 찾은 문구(evidence_text)가 있어야만 출력한다. 찾지 못하면 버리고 보고한다.
-- 결과: data/staging/role_holders_seoul.json (data/staging/role_holders.json 과 같은 형식)
+역대 의장단·의장단 구성·교섭단체 대표 페이지와 선출 보도자료(boardTypeId=66)의 본문·첨부 PDF를 확인한다.
+대상 직책은 의장단, 상임위원장, 예산결산특별위원장, 교섭단체 대표의원이다.
+원문은 data/raw/roles_seoul/<sha256 앞 12자리>_<이름>.<html|pdf>에 저장하고 URL·해시·수집 시각은 manifest.json에 기록한다.
+원문에서 근거 문구(evidence_text)를 찾은 기록만 data/staging/role_holders_seoul.json에 싣고, 찾지 못한 경우는 보고한다.
+출력 형식은 data/staging/role_holders.json과 같다.
 """
 import hashlib
 import html
@@ -121,7 +119,7 @@ def pdf_text(raw):
 
 
 def press(bid):
-    """보도자료 게시글 본문과 첨부 PDF 텍스트. (제목, 등록일, 본문+PDF 텍스트) 를 돌려준다."""
+    """보도자료 게시글의 제목과 등록일, 본문에 첨부 PDF 텍스트를 합친 내용을 반환한다."""
     url = PRESS_URL.format(bid=bid)
     raw = cached(url)
     if raw is None:
@@ -152,8 +150,8 @@ def press(bid):
 
 
 # ---------------------------------------------------------------- 기록 정의
-# 각 기록: 근거 문서(PAGES 키 또는 보도자료 번호)와, 그 문서에서 반드시 찾아야 하는 정규식.
-# 찾은 문구가 evidence_text 가 된다. 날짜는 근거 문서에 적힌 것만 쓴다.
+# 기록마다 근거 문서(PAGES 키 또는 보도자료 번호)와 그 문서에서 확인할 문구의 정규식을 지정한다.
+# 정규식에 일치한 원문을 evidence_text로 보관하고 날짜는 근거 문서에서 확인한 값만 쓴다.
 T11A, T11B, T12A = "제11대 전반기", "제11대 후반기", "제12대 전반기"
 SPECS = []
 

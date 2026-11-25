@@ -1,8 +1,8 @@
-"""관악구의회 업무추진비 게시판 수집기.
+"""관악구의회 업무추진비 게시판의 게시글을 확인하고 첨부 원본을 수집한다.
 
-https://www.ga21c.seoul.kr/kr/costBBS.do 의 모든 게시글과 첨부파일을 원본 그대로 내려받는다.
-- 첨부파일은 data/raw/gwanak/<sha256 앞 12자리>_<원본 파일명> 으로 저장 (이미 있으면 건너뜀)
-- data/raw/gwanak/manifest.json 에 게시글·첨부파일 메타데이터를 기록
+게시판 주소는 https://www.ga21c.seoul.kr/kr/costBBS.do 이다.
+첨부는 data/raw/gwanak/<sha256 앞 12자리>_<원본 파일명>에 보관하고 이미 받은 파일은 재사용한다.
+게시글과 첨부의 메타데이터는 같은 디렉터리의 manifest.json에 기록한다.
 """
 import hashlib
 import html

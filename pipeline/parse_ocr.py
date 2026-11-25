@@ -1,12 +1,13 @@
-"""스캔·이미지 PDF를 OCR로 읽어 표를 다시 짠다 → data/staging/<slug>_ocr.jsonl
+"""의회별 파싱 보고서에서 OCR이 필요한 스캔 PDF를 찾아 표를 복원하고 data/staging/<slug>_ocr.jsonl에 저장한다.
 
-대상: 각 의회 파싱 보고서에서 'OCR 필요'로 남은 파일.
-방법
-  1) 페이지 전체 OCR(ocr.py) → 머리글 행에서 열 위치(앵커)를 잡는다. 머리글이 한 상자로 붙어 읽혀도 글자 위치로 나눈다.
-  2) 글자 상자를 세로 위치로 묶어 행을 만들고, 날짜·시간·금액·결제수단은 모양으로, 나머지는 가장 가까운 열로 배정한다.
-  3) 한 자리 숫자(대상 인원)는 전체 OCR에서 잘 빠지므로, 그 열만 잘라 2배로 키워 다시 OCR한다.
-  4) 표의 '합계' 행이 있으면 읽은 금액 합계와 비교해 파일별 일치 여부를 보고서에 남긴다.
-OCR로 읽은 행은 parse_confidence를 MEDIUM/LOW로만 두고, 사이트에 'OCR' 표시가 붙는다.
+1) 페이지 전체를 OCR로 읽고 머리글에서 각 열의 가로 위치를 찾는다.
+   머리글 여러 개가 한 상자에 들어오면 글자 위치로 나눈다.
+2) 글자 상자를 세로 위치로 묶어 행을 만든다.
+   날짜·시간·금액·결제수단은 값의 형식으로 열을 찾고, 나머지는 가장 가까운 열에 배정한다.
+3) 한 자리 인원은 페이지 전체를 읽을 때 빠지기 쉬워 인원 열을 두 배로 확대해 다시 읽는다.
+   그래도 비어 있는 금액 행의 인원 칸은 세 배로 확대해 확인한다.
+4) 인쇄된 합계가 있으면 추출한 금액 합계와 원 단위로 대조하고 파일별 결과를 기록한다.
+OCR 행은 MEDIUM 또는 LOW로 표시한다. 인쇄 합계와 일치해야 행의 MEDIUM 판정을 유지한다.
 """
 import json
 import re
@@ -52,8 +53,8 @@ SIDO = re.compile(r"^(서울|경기|인천|부산|대구|광주|대전|울산|�
 
 
 def header_anchors(boxes):
-    """머리글 후보 행(키워드가 가장 많이 겹치는 가로 띠)에서 열 이름 → x 중심.
-    '대상인원 집행금액 결제방법'처럼 붙어 읽히거나 '집 행목적'처럼 띄어 읽힌 머리글도 공백을 지우고 찾는다."""
+    """머리글 이름이 가장 많이 일치하는 행에서 각 열의 가로 중심과 머리글 아래쪽 위치를 찾는다.
+    '대상인원 집행금액 결제방법'처럼 한 상자에 붙거나 '집 행목적'처럼 글자가 떨어진 경우도 공백을 지우고 찾는다."""
     keys = sorted(((k, col) for col, ks in HEADER.items() for k in ks), key=lambda kc: -len(kc[0]))
     best, best_y = {}, None
     for b in boxes:
@@ -86,7 +87,7 @@ def header_anchors(boxes):
                     if col in anchors or len(k) != len(tok) or len(k) < 2 or (len(k) == 2 and o["text"].strip() != tok):
                         continue
                     if any(kk == tok for kk, _ in keys):
-                        break  # 이미 정확히 일치하는 머리글('장소')은 다른 열('주소')로 다시 잡지 않는다
+                        break  # ‘장소’로 이미 정확히 읽은 글자는 한 글자 차이인 ‘주소’ 열에 다시 배정하지 않는다.
                     if sum(a != c for a, c in zip(k, tok)) == 1:
                         pos = o["text"].find(tok)
                         anchors[col] = o["x"] + o["w"] * (pos + len(tok) / 2) / max(len(o["text"]), 1)
@@ -199,7 +200,7 @@ def parse_date(text, period_year, period_month=None):
 
 
 def attendee_pass(img, anchors, top, rows_y, bottom):
-    """대상 인원 열만 잘라 키워서 다시 OCR → {행 y중심: 인원}."""
+    """인원 열만 확대해 다시 읽고 각 숫자를 세로 중심이 가장 가까운 행에 연결한다."""
     if "attendees" not in anchors:
         return {}
     xs = sorted(anchors.values())
@@ -334,7 +335,7 @@ def parse_pdf(path, period, known_roles=frozenset(), stats=None):
             amt = next((to_amount(x) for x in reversed(cells["amount"]) if to_amount(x) is not None), None)
             inherited = False
             if d is None and amt is not None and prev is not None and (cells["time"] or cells["merchant_name"]):
-                if not cells["date"]:  # 날짜 칸이 비어 있음 = 같은 날짜를 병합 셀로 한 번만 적은 표
+                if not cells["date"]:  # 같은 날짜를 병합해 한 번만 적는 표에서는 날짜 칸이 빈 거래가 직전 거래의 날짜를 이어받는다.
                     d, full, inherited = prev["date"], False, True
                     stats["inherited_date_rows"] += 1
             if d is None and amt is not None:
@@ -342,14 +343,14 @@ def parse_pdf(path, period, known_roles=frozenset(), stats=None):
             if d and amt is None:
                 stats["missing_amount_rows"] = stats.get("missing_amount_rows", 0) + 1
             if d is None or amt is None:
-                # 날짜·금액이 없는 줄은 앞 행 칸이 줄바꿈된 것으로 본다
+                # 금액 칸이 비었을 때만 상호·주소·목적 문구를 직전 거래의 이어지는 줄로 본다.
                 if prev is not None and not cells["amount"]:
                     for k in ("merchant_name", "merchant_address", "purpose"):
                         if cells[k]:
                             prev[k] = ((prev.get(k) or "") + " " + " ".join(cells[k])).strip()
                 continue
             tm = next((TIME.match(x.replace(" ", "")) for x in cells["time"] if TIME.match(x.replace(" ", ""))), None)
-            # 페이지 전체 OCR에서 읽은 값이 우선, 없을 때만 열을 잘라 다시 읽은 값(0명은 테두리·옆 칸 숫자 오독이라 버림)
+            # 인원은 전체 페이지에서 읽은 양수를 우선하고, 없으면 확대해 읽은 값을 쓴다. 0은 테두리나 옆 칸을 잘못 읽었을 수 있어 버린다.
             nums = [int(re.sub(r"\D", "", x)) for x in cells["attendees"] if re.sub(r"\D", "", x)]
             att = next((n for n in nums if n > 0), None) or (extra.get(yc) or None)
             row = {
@@ -369,8 +370,9 @@ def parse_pdf(path, period, known_roles=frozenset(), stats=None):
 
 
 def sanitize_role(text, known_roles=frozenset()):
-    """OCR 칸에서 직책만 고른다. 이 의회의 텍스트 자료에 실제로 나오는 직책명과 같을 때만 쓰고,
-    아니면(예: '김OO위원장'처럼 성명이 붙은 경우) 버린다 — 성명을 직책으로 저장하지 않기 위해서다."""
+    """성명이 직책으로 저장되지 않도록 해당 의회 자료에서 확인한 직책을 먼저 찾는다.
+    의장·부의장 등 기본 직책은 명부에 없어도 인정한다.
+    비교할 직책 목록이 비었을 때는 ROLE_PATTERN에 전체가 일치하는 값만 쓴다."""
     compact = re.sub(r"\s+", "", text or "")
     if not compact:
         return None
@@ -439,7 +441,7 @@ def main():
             continue
         rep = json.loads(rp.read_text())
         files = rep if isinstance(rep, list) else rep.get("files", [])
-        # 수집 범위(2022-07, 제9대) 밖의 과거 스캔본은 OCR 대상에서 뺀다
+        # 파싱 보고서에 공개 기간이 2022년 이전으로 적힌 스캔본은 제외한다. 기간을 알 수 없는 파일은 후보에 남긴다.
         todo = [f for f in files if f.get("status") == "unparsed" and OCR_REASON.search(f.get("reason") or "")
                 and (f.get("period") or "9999") >= "2022"]
         stage = STAGING / f"{slug}_ocr.jsonl"

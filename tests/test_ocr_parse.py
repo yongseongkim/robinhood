@@ -1,4 +1,4 @@
-"""OCR 표 복원 도우미 테스트 (Vision 호출 없이 가짜 상자로 검증)."""
+"""Vision을 호출하지 않고 OCR 글자 상자의 좌표와 텍스트로 표 복원을 검증한다."""
 import sys
 from pathlib import Path
 

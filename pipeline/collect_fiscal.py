@@ -8,7 +8,7 @@
   TotalExpenditure5  세부사업 예산편성현황(총지출 기준)     FSCL_YY   단위 천원
   GovernmentDebtYear 국가채무(D1)                           (전체)    단위 조원
   TotalIncome / GrossExpend / BudgetBalance  월별 총수입·총지출·재정수지(누계)  OJ_YY  단위 조원
-인증키는 credentials.yaml(SOPS)에서 메모리로만 읽고 파일·로그·manifest에 남기지 않는다.
+인증키는 credentials.get으로 읽고 파일·로그·manifest에 기록하지 않는다.
 """
 import hashlib
 import json
@@ -97,7 +97,7 @@ def collect(api):
                 params[ds["year_param"]] = str(y)
             fname = f"{svc}/{y or 'all'}.json"
             path = OUT / fname
-            # 지난 해 이전 자료는 확정이라 다시 받지 않는다 (올해·작년·전체 시계열은 매번 갱신)
+            # 재작년까지의 연도별 파일은 이미 있으면 재사용한다. 작년 이후 자료와 연도 구분 없는 전체 시계열은 다시 조회한다.
             if path.exists() and y is not None and y < THIS_YEAR - 1:
                 continue
             rows, total, code = api.fetch_all(svc, params)
@@ -254,7 +254,7 @@ def normalize(manifest):
         for y, rows in load(svc).items():
             if not rows:
                 continue
-            last = max(rows, key=lambda r: int(r.get("OJ_M") or 0))  # 월별 누계 → 가장 늦은 달이 그해 누계
+            last = max(rows, key=lambda r: int(r.get("OJ_M") or 0))  # 월별 값이 누계이므로 해당 연도에서 마지막으로 공개된 달의 값을 쓴다.
             a = actual.setdefault(y, {"through_month": int(last.get("OJ_M") or 0)})
             a["through_month"] = min(a["through_month"], int(last.get("OJ_M") or 0))
             for k, f in fields.items():

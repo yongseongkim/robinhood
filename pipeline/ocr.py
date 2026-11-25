@@ -1,4 +1,10 @@
-"""스캔 PDF의 글자와 위치를 읽는다. 좌표는 왼쪽 위를 원점으로 한 0~1 비율이다."""
+"""스캔 PDF에서 한국어·영어 글자와 위치를 읽는다.
+
+기본 엔진은 macOS에서 Vision, Linux에서 Tesseract다.
+페이지 왼쪽 위를 원점으로 삼고 가로·세로 위치를 각각 0~1 범위로 저장한다.
+원본 SHA-256, 엔진 식별자, 렌더링 해상도가 모두 같으면 캐시를 재사용한다.
+--force를 지정하면 같은 파일도 다시 읽는다.
+"""
 import csv
 import hashlib
 import io
@@ -100,7 +106,7 @@ def ocr_image(pil_image):
     req = Vision.VNRecognizeTextRequest.alloc().init()
     req.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
     req.setRecognitionLanguages_(["ko-KR", "en-US"])
-    req.setUsesLanguageCorrection_(False)  # 상호·숫자를 사전 단어로 '고치지' 않게
+    req.setUsesLanguageCorrection_(False)  # 언어 보정이 상호나 숫자를 사전에 있는 단어로 바꾸지 않도록 한다.
     handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(_cgimage(pil_image), None)
     ok, err = handler.performRequests_error_([req], None)
     if not ok:

@@ -1,8 +1,7 @@
-"""Parse 마포구의회 업무추진비 attachments (PDF text tables, one XLSX) into the staging schema.
+"""마포구의회 업무추진비 첨부(텍스트 PDF 표와 엑셀)를 지방의회 공통 형식으로 읽는다.
 
-Usage: .venv/bin/python -I pipeline/parse_mapo.py
-Reads data/raw/mapo/manifest.json, writes data/staging/mapo.jsonl and
-data/staging/mapo_parse_report.json.
+.venv/bin/python -I pipeline/parse_mapo.py로 실행한다.
+data/raw/mapo/manifest.json에서 첨부를 찾아 거래는 data/staging/mapo.jsonl에, 파일별 파싱 결과는 data/staging/mapo_parse_report.json에 기록한다.
 """
 import json
 import re
@@ -18,8 +17,8 @@ RAW_DIR = ROOT / "data" / "raw" / "mapo"
 OUT = ROOT / "data" / "staging" / "mapo.jsonl"
 REPORT = ROOT / "data" / "staging" / "mapo_parse_report.json"
 
-# Header keyword -> field. Checked in order; the first match wins for a header cell,
-# so specific keywords come before generic ones ("집행내역" before "내역").
+# 머리글마다 처음 일치한 단어로 열을 정한다.
+# ‘집행내역’처럼 구체적인 단어를 ‘내역’보다 앞에 둔다.
 HEADER_KEYWORDS = [
     ("연번", "row_no"),
     ("번호", "row_no"),
@@ -94,7 +93,7 @@ def map_header(cells):
             continue
         for kw, field in HEADER_KEYWORDS:
             if kw in key:
-                # "일시" header that is really date+time is still "date"; time column separate
+                # 날짜와 시간이 함께 적힌 ‘일시’는 날짜 열로 매핑하고, 별도 시간 열이 있으면 따로 읽는다.
                 if field not in mapping:
                     mapping[field] = i
                 break
@@ -180,7 +179,7 @@ def infer_budget(filename):
     if "의정운영" in name or "공통경비" in name:
         return "의정운영공통경비"
     if "사무국" in name or "시책" in name or "기관" in name:
-        return None  # mixed 시책/기관 file with no 비목 column: do not guess
+        return None  # 시책·기관운영 경비가 섞인 파일은 비목 열 없이 파일명만으로 구분할 수 없다.
     if "의장" in name or "위원장" in name or "교섭단체" in name or "의회운영" in name:
         return "의회운영업무추진비"
     return None

@@ -114,7 +114,8 @@ def parse_attachments(c, view_html, row_downloads=()):
 
 
 def parse_period_title(title):
-    """게시글 제목 → 'YYYY-MM' / 'YYYY-Qn' / 'YYYY' (공통 parse_period보다 넓은 표기 처리)."""
+    """제목에서 공개 대상 월·분기·연도를 읽는다.
+    월 범위가 한 분기 안에 들면 분기로, 분기를 걸치면 연도로 기록한다."""
     t = title or ""
     m = re.search(r"(20\d{2})\s*[.년]\s*(\d{1,2})\s*\.?\s*월?\s*~\s*(\d{1,2})\s*\.?\s*월?", t)
     if m:
@@ -135,6 +136,6 @@ def parse_period_title(title):
 
 
 def title_range_end(title):
-    """'2022년 3월 ~ 6월' 같은 범위 제목의 마지막 달 (YYYY, M). 범위 표기가 없으면 None."""
+    """'2022년 3월 ~ 6월'이면 마지막 달인 (2022, 6)을 반환한다. 월 범위가 없으면 None을 반환한다."""
     m = re.search(r"(20\d{2})\s*[.년]\s*(\d{1,2})\s*\.?\s*월?\s*~\s*(\d{1,2})\s*\.?\s*월?", title or "")
     return (int(m.group(1)), int(m.group(3))) if m else None

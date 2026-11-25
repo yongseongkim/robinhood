@@ -1,6 +1,8 @@
 # PostgreSQL 운영과 주기 수집 배포
 
-기존 메인 DB 안의 `robinhood` 전용 스키마를 사용합니다. 이 문서는 운영 계정·환경 파일·권한·서비스 활성화를 설명합니다. 공통 의존성과 로컬 실행은 [설치 안내](../docs/INSTALL.md)를 따릅니다. 저장소의 서비스 파일은 배포 템플릿이며 실제 활성화는 운영 환경에서 수행합니다.
+운영에서는 기존 메인 PostgreSQL의 `robinhood` 전용 스키마를 사용합니다.
+아래 절차에 따라 운영 계정에 권한을 부여하고 환경 파일을 준비한 뒤 API와 수집 worker를 활성화합니다.
+공통 의존성과 로컬 실행 방법은 [설치 안내](../docs/INSTALL.md)에 있습니다.
 
 Linux worker는 Tesseract로 스캔 PDF를 처리합니다. 설치·검증 기준은 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 있습니다.
 
@@ -53,7 +55,7 @@ worker 교체는 Recreate이며 SIGTERM 뒤 진행 중인 수집이 끝날 때�
 
 ## 환경과 권한
 
-API 환경 파일 `/etc/robinhood/api.env` 예시:
+API 환경 파일 `/etc/robinhood/api.env`를 다음과 같이 작성합니다.
 
 ```dotenv
 DATABASE_URL=postgresql://API_USER:ENCODED_PASSWORD@DB_HOST:5432/MAIN_DB?sslmode=require
@@ -62,11 +64,21 @@ ROBINHOOD_VAR=/var/lib/robinhood
 NAVER_MAPS_CLIENT_ID=
 ```
 
-worker 환경 파일 `/etc/robinhood/worker.env`에는 같은 DB의 적재 역할 연결을 설정합니다. 직접 연결 URL이 필요하면 `ROBINHOOD_JOB_DATABASE_URL`로 지정합니다. `ROBINHOOD_COLLECTOR_PYTHON=/srv/robinhood/.venv/bin/python`, `ROBINHOOD_VAR=/var/lib/robinhood`도 설정합니다. 실제 환경 파일은 서비스 계정만 읽도록 관리합니다.
+worker 환경 파일 `/etc/robinhood/worker.env`에는 같은 DB의 적재 역할로 연결할 URL을 지정합니다.
+API가 트랜잭션 풀을 사용하면 `ROBINHOOD_JOB_DATABASE_URL`에는 세션 잠금을 유지할 수 있는 직접 연결 URL을 지정합니다.
+`ROBINHOOD_COLLECTOR_PYTHON=/srv/robinhood/.venv/bin/python`과 `ROBINHOOD_VAR=/var/lib/robinhood`도 설정합니다.
+각 환경 파일은 해당 서비스를 실행하는 계정만 읽을 수 있도록 권한을 설정합니다.
 
-저장소에는 SOPS 암호문 `credentials.yaml`과 KMS 설정 `.sops.yaml`을 함께 포함합니다. worker 실행 환경에 SOPS CLI와 해당 키의 `roles/cloudkms.cryptoKeyDecrypter` 권한을 가진 GCP 실행 주체를 준비합니다. 운영에서는 서비스 계정/Workload Identity의 ADC를 사용하며, 별도 ADC 파일이 필요하면 저장소 밖에서 주입합니다. systemd의 ProtectHome 설정을 고려해 서비스가 읽을 수 있는 경로를 사용합니다. 대체 API 키는 `ASSEMBLY_API_KEY`, `OPENFISCAL_API_KEY`로 주입할 수 있습니다.
+저장소에는 SOPS 암호문 `credentials.yaml`과 KMS 설정 `.sops.yaml`이 있습니다.
+worker 환경에 SOPS CLI를 설치하고, worker가 사용하는 GCP 계정에 해당 키의 `roles/cloudkms.cryptoKeyDecrypter` 권한을 부여합니다.
+운영에서는 서비스 계정이나 Workload Identity로 ADC 인증을 구성합니다.
+별도 ADC 파일이 필요하면 저장소 밖에 두고 systemd의 `ProtectHome`이 허용하는 경로에서 서비스 계정에 읽기 권한을 줍니다.
+환경별 API 키는 `ASSEMBLY_API_KEY`와 `OPENFISCAL_API_KEY`로 지정할 수도 있습니다.
 
-마이그레이션 역할은 해당 스키마의 생성/DDL 권한이 필요합니다. API는 해당 스키마의 USAGE와 테이블 SELECT만 있으면 됩니다. 역할을 미리 생성한 DB 관리자가 부여할 권한의 예시는 다음과 같습니다. 실제 역할명으로 바꿔 적용하세요.
+마이그레이션 역할에는 전용 스키마를 준비하고 그 안에서 테이블을 생성·변경할 권한이 필요합니다.
+조회 API 역할에는 스키마의 `USAGE`와 테이블의 `SELECT` 권한을 부여합니다.
+다음은 DB 관리자가 두 역할을 미리 만든 경우의 예입니다.
+배포할 때는 실제 역할명을 사용합니다.
 
 ```sql
 CREATE SCHEMA IF NOT EXISTS robinhood AUTHORIZATION robinhood_writer;
@@ -76,11 +88,14 @@ ALTER DEFAULT PRIVILEGES FOR ROLE robinhood_writer IN SCHEMA robinhood
     GRANT SELECT ON TABLES TO robinhood_api;
 ```
 
-worker 역할과 API 역할을 하나로 시작해도 API 자체의 읽기 트랜잭션은 유지됩니다. 운영 DB에 적용할 역할과 계정 생성은 기존 인프라 관리 방식에 맞춥니다.
+API와 worker가 같은 역할을 사용해도 조회 API는 읽기 전용 트랜잭션을 엽니다.
+운영 역할과 계정은 메인 DB의 계정 관리 절차에 따라 생성합니다.
 
 ## 준비와 최초 발행
 
-프로젝트를 `/srv/robinhood`에 놓고 서비스 계정 `robinhood`가 `data/`, `site/data/`, `/var/lib/robinhood`를 읽고 쓸 수 있게 준비합니다. 최초 배포는 빈 데이터 볼륨과 DB에서 수집해 채웁니다. 다음 명령은 서비스 계정과 worker 환경변수가 설정된 셸에서 실행하며, SOPS CLI와 KMS 권한도 준비되어 있어야 합니다.
+프로젝트를 `/srv/robinhood`에 놓고 서비스 계정 `robinhood`가 `data/`, `site/data/`, `/var/lib/robinhood`를 읽고 쓸 수 있게 준비합니다.
+최초 배포는 빈 데이터 볼륨과 DB에서 수집해 채웁니다.
+다음 명령은 서비스 계정과 worker 환경변수가 설정된 셸에서 실행하며, SOPS CLI와 KMS 권한도 준비되어 있어야 합니다.
 
 ```bash
 cd /srv/robinhood
@@ -100,17 +115,20 @@ uv run --project robinhood-server --env-file /etc/robinhood/worker.env robinhood
 uv run --project robinhood-server --env-file /etc/robinhood/worker.env robinhood collect
 ```
 
-`collect`가 기관별 자료와 없는 지도 원본을 가져와 파싱·정규화·검증 후 DB에 반영합니다. 최초 발행 전까지 API 준비 상태는 503입니다. 이후 코드 재배포에서는 DB와 데이터 볼륨을 유지하며 worker가 주기 갱신합니다.
+`collect`는 기관별 자료와 로컬에 없는 지도 원본을 내려받고 파싱·정규화 결과를 검증한 뒤 DB에 발행합니다.
+최초 발행 전에는 `/api/health`가 HTTP 503을 반환합니다.
+코드를 다시 배포할 때도 DB와 데이터 볼륨은 유지하고 worker가 자료를 주기적으로 갱신합니다.
 
-강북구 자료 수집에는 설치된 Chrome이 필요합니다.
+강북구의회 첨부를 수집하려면 Chrome 또는 worker 이미지의 Chromium을 사용합니다.
 
 OCI/Linux의 Tesseract 시스템 패키지와 한국어·영어 언어 데이터 설치 방법은 [OCR 실행 환경](../docs/INSTALL.md#ocr-실행-환경)에 기록했습니다.
 
 ## Linux 상시 실행
 
-`systemd/robinhood-api.service`, `systemd/robinhood-worker.service`는 검토 가능한 서비스 구성입니다. 파일의 경로·계정·환경 파일을 배포 위치에 맞춘 후 활성화합니다.
+`systemd/robinhood-api.service`와 `systemd/robinhood-worker.service`의 실행 경로, 서비스 계정, 환경 파일 경로를 배포 환경에 맞춘 뒤 활성화합니다.
 
-제공된 API unit의 포트는 8000입니다. 설치 안내의 8010 개발 예시나 운영 프록시에 맞추려면 unit의 `ExecStart`에서 `--port`를 조정합니다.
+API 서비스 파일의 기본 포트는 8000입니다.
+운영 프록시나 개발 예시의 8010번 포트에 맞추려면 서비스 파일의 `ExecStart`에서 `--port` 값을 바꿉니다.
 
 ```bash
 sudo cp deploy/systemd/robinhood-api.service deploy/systemd/robinhood-worker.service /etc/systemd/system/
@@ -120,25 +138,43 @@ sudo systemctl status robinhood-worker
 journalctl -u robinhood-worker -f
 ```
 
-worker는 시작/재시작 후 PostgreSQL에 저장된 일정을 확인합니다. 새 상태라면 즉시 실행하고 이후 성공 완료에서 24시간 간격입니다. 실패 시 1·5·15분 재시도 후 다음 정규 주기로 넘어갑니다. 여러 호스트가 같은 설정으로 실행되어도 advisory lock과 DB의 다음 실행 시각으로 조정합니다. 장애로 잠금 연결이 끊어지면 해당 연결을 통한 발행도 실패합니다.
+worker는 시작할 때 PostgreSQL에 저장된 다음 실행 시각을 확인합니다.
+일정이 없으면 즉시 수집하고, 성공하면 기본 설정에서 완료 시각의 24시간 뒤에 다시 수집합니다.
+실패하면 1분, 5분, 15분 뒤에 차례로 재시도한 다음 정규 주기로 돌아갑니다.
+여러 호스트에서 실행해도 잠금을 획득한 worker만 DB의 일정을 확인하고 수집을 시작합니다.
+발행도 같은 연결에서 수행하므로 연결이 끊어지면 그 작업의 발행은 실패합니다.
 
-Kubernetes CronJob 등 기존 스케줄러를 쓴다면 worker 서비스 대신 `robinhood run-due`를 1분 간격으로 실행하면 됩니다. 환경변수와 원본 데이터 영구 볼륨은 동일하게 전달해야 합니다. 수집 과정은 기존 게시판/인증키/지원 연도 범위 안에서 동작합니다.
+Kubernetes CronJob 같은 외부 스케줄러를 쓸 때는 worker 서비스 대신 `robinhood run-due`를 1분마다 실행합니다.
+이 작업에도 worker와 같은 환경변수와 원본 데이터 영구 볼륨을 연결합니다.
+기관별 인증키·첨부 재사용 조건과 지원 기간은 [자동 갱신 범위](../robinhood-server/README.md#실제-자동-갱신-범위)에서 확인합니다.
 
 ## 선택적 Codex OCR 문구 정정
 
-서버 환경에서 `uv sync --project robinhood-server --extra ocr-correction`로 SDK를 설치하고 worker 환경에 `ROBINHOOD_OCR_CORRECTION_ENABLED=true`를 설정합니다. 서버 수집 job이 OCR 파싱과 정규화 사이에서 호출합니다. 별도 AI 스케줄러나 ChatGPT 브라우저 자동화는 사용하지 않습니다.
+서버 환경에서 `uv sync --project robinhood-server --extra ocr-correction`으로 SDK를 설치하고 worker 환경에 `ROBINHOOD_OCR_CORRECTION_ENABLED=true`를 설정합니다.
+수집 worker가 OCR 파싱과 정규화 사이에 SDK를 호출하므로 별도 스케줄러나 브라우저 자동화가 필요하지 않습니다.
 
-`ROBINHOOD_OCR_CODEX_HOME=/var/lib/robinhood/codex-home`처럼 서비스 계정이 읽고 쓸 수 있는 전용 실행 환경과 ChatGPT 로그인이 필요합니다. 제공된 systemd 서비스는 ProtectHome=true이므로 다른 사용자의 홈 디렉터리에 의존하지 않게 준비합니다. 기존 설정이나 인증 파일을 자동 복사·변경하지 않습니다. SDK는 ChatGPT 로그인 여부를 확인하고 API 키 인증이면 중단합니다. 계정 사용량 한도와 로그인 상태에 따라 실행이 실패할 수 있고, 기존 job의 재시도 정책을 따릅니다.
+worker 서비스 계정이 읽고 쓸 수 있는 전용 경로(예: `ROBINHOOD_OCR_CODEX_HOME=/var/lib/robinhood/codex-home`)에 ChatGPT 로그인을 준비합니다.
+제공된 서비스 파일은 `ProtectHome=true`를 사용하므로 다른 사용자의 홈 디렉터리에 있는 인증 파일에 의존할 수 없습니다.
+설정이나 인증 파일은 자동으로 복사하거나 변경하지 않습니다.
+SDK는 API 키로 인증한 경우 정정 호출을 중단합니다.
+계정 사용량 한도나 로그인 상태 때문에 실행이 실패하면 수집 worker의 재시도 일정을 따릅니다.
 
-묶음 수·행 수·호출 제한시간은 서버 `.env.example`의 `ROBINHOOD_OCR_*` 설정으로 조정합니다. `ocr-correct --plan`은 모델을 호출하지 않습니다. PostgreSQL 마이그레이션 002가 정정 이력 테이블을 추가하며, 원본·OCR 추출본은 유지하고 별도 정정본만 다음 정규화에 적용합니다. 자세한 범위·검증 기준은 서버 README에 있습니다.
+호출당 제한 시간과 실행당 묶음 수, 묶음당 행 수는 서버의 [예제 환경 파일](../robinhood-server/.env.example)에 있는 `ROBINHOOD_OCR_*` 설정으로 조정합니다.
+`ocr-correct --plan`으로 모델 호출 없이 대상과 입력 크기를 확인할 수 있습니다.
+PostgreSQL 마이그레이션 002는 정정 이력을 별도 테이블에 저장할 수 있도록 합니다.
+원본과 OCR 추출본을 보존하고 다음 정규화에서 검증한 정정본을 적용합니다.
+정정 대상과 검증 기준은 [서버 안내](../robinhood-server/README.md#ocr-표-텍스트-정정)에 있습니다.
 
 ## 확인과 복구
 
-- `/api/health`: 발행 데이터가 조회 가능한지 확인. 미적재·DB 장애는 503.
-- `/api/v1/jobs/status`: 최근 상태, 단계, 시도 횟수, 발행 여부, 다음 실행 시각.
-- `/api/v1/jobs/history?limit=20`: 여러 호스트에서 공유하는 실행 이력.
-- `var/logs/`: 상세 수집 로그. 외부 API로 제공하지 않음.
+- `/api/health`는 발행한 자료를 조회할 수 있으면 HTTP 200, 아직 적재하지 않았거나 DB를 읽을 수 없으면 HTTP 503을 반환합니다.
+- `/api/v1/jobs/status`에서 최근 수집 단계와 상태, 시도 횟수, 발행 여부, 다음 실행 시각을 확인합니다.
+- `/api/v1/jobs/history?limit=20`에서 여러 호스트가 같은 DB에 기록한 최근 실행 이력을 확인합니다.
+- 수집 로그 본문은 worker 호스트의 `ROBINHOOD_VAR/logs/`에서 확인합니다.
 
-실패한 적재는 PostgreSQL 트랜잭션을 롤백해 이전 조회 자료를 유지합니다. 원인을 고친 뒤 `collect`로 즉시 다시 실행하거나 worker의 재시도를 기다립니다. 미완료 작업 기록은 다음 잠금 소유자가 중단으로 기록합니다. 메인 PostgreSQL의 백업·autovacuum 정책을 그대로 적용하고, 원본 파일/OCR 캐시는 별도로 백업합니다.
+적재에 실패하면 PostgreSQL 트랜잭션을 롤백하므로 API는 이전 자료를 계속 제공합니다.
+원인을 고친 뒤 `collect`로 바로 다시 수집하거나 worker의 재시도를 기다립니다.
+다음 worker가 잠금을 획득하면 완료 전에 멈춘 이전 실행을 `interrupted`로 기록합니다.
+메인 PostgreSQL의 백업·autovacuum 정책을 적용하고 원본 파일과 OCR 캐시는 별도로 백업합니다.
 
-구현에 사용한 동작 기준: [PostgreSQL 트랜잭션 격리](https://www.postgresql.org/docs/current/transaction-iso.html), [advisory lock](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS), [psycopg COPY와 롤백](https://www.psycopg.org/psycopg3/docs/basic/copy.html).
+발행과 롤백에 사용하는 동작은 [PostgreSQL 트랜잭션 격리](https://www.postgresql.org/docs/current/transaction-iso.html), [advisory lock](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS), [psycopg COPY와 롤백](https://www.psycopg.org/psycopg3/docs/basic/copy.html) 문서를 참고합니다.

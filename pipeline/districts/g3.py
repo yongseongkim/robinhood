@@ -85,7 +85,7 @@ COUNCILS = {
         "list_path": "/kr/bbs",
         "post_re": r"reform=view&(?:amp;)?uid=[0-9A-F]{32}",
         "attach_re": r"/kr/bbs/download\?",
-        # 서버가 중간 인증서(AlphaSSL CA 2025)를 보내지 않는다. 검증을 끄지 않고, 인증서의 AIA 주소에서 중간 인증서를 받아 보탠다.
+        # 이 서버는 중간 인증서(AlphaSSL CA 2025)를 보내지 않으므로 인증서의 AIA 주소에서 중간 인증서를 받아 검증에 사용한다.
         "extra_ca": "http://secure.globalsign.com/cacert/gsgccr6alphasslca2025.crt",
     },
     "jungnang": {
