@@ -36,7 +36,7 @@ def write_json(path, obj, indent=None):
 
 
 def parse_period(title):
-    """게시글 제목의 공개 대상 기간: '2026-07' (월), '2022-Q1' (분기), '2021' (연)."""
+    """게시글 제목에서 공개 대상 기간을 읽는다. 월은 '2026-07', 분기는 '2022-Q1', 연도는 '2021' 형식이다."""
     m = re.search(r"(20\d{2})\s*년\s*(\d{1,2})\s*월", title or "")
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}"
@@ -48,7 +48,8 @@ def parse_period(title):
 
 
 def period_range(period):
-    """parse_period 결과 → (시작일, 종료일) ISO 문자열."""
+    """공개 대상 기간의 첫날과 마지막 날을 ISO 날짜 문자열로 반환한다.
+    기간이 없으면 (None, None)을 반환한다."""
     if not period:
         return None, None
     y = int(period[:4])
@@ -70,7 +71,7 @@ def short_hash(*parts, n=10):
 
 
 def clean_text(s):
-    """NFKC(전각→반각), 전각 공백·줄바꿈 제거, 연속 공백 축약."""
+    """문자열을 NFKC로 정규화하고 줄바꿈을 포함한 연속 공백을 한 칸으로 합친다."""
     if s is None:
         return None
     s = unicodedata.normalize("NFKC", str(s)).replace("　", " ")
@@ -88,7 +89,7 @@ EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
 
 
 def mask_contacts(s):
-    """자유 기재 텍스트의 전화번호·이메일을 가린다 (지역번호·통신사 앞자리만 남김)."""
+    """자유 기재란에서 이메일 주소를 가리고 전화번호는 지역번호나 휴대전화 앞자리만 남긴다."""
     if not s:
         return s
     s = PHONE_RE.sub(lambda m: m.group(1) + "-****-****", s)
@@ -96,7 +97,7 @@ def mask_contacts(s):
 
 
 def merchant_key(name):
-    """동일 업체의 표기 차이(법인 표기, 공백, 괄호, 전각문자)를 흡수한 비교용 키."""
+    """법인 표기·공백·괄호·전각 문자 차이가 있는 상호를 비교할 키를 만든다."""
     s = clean_text(name)
     if not s:
         return None
@@ -110,7 +111,8 @@ PLACEHOLDER_BIZNO = {"9999999999", "0000000000", "1111111111", "1234567890"}
 
 
 def parse_bizno(raw):
-    """사업자등록번호 형식 검증. (정규화된 번호, 구분) 반환. 생년월일이면 ('', 'INDIVIDUAL')."""
+    """사업자등록번호의 형식을 검사해 (정규화한 번호, 사업자 구분)을 반환한다.
+    생년월일 형식이면 (None, 'INDIVIDUAL'), 번호 형식을 확인할 수 없으면 (None, None)을 반환한다."""
     if raw is None:
         return None, None
     s = str(raw).strip()
@@ -133,7 +135,7 @@ def parse_bizno(raw):
 
 
 def display_bizno(bizno, kind):
-    """법인·비영리 번호만 전체 공개, 개인사업자 번호는 뒷자리 가림."""
+    """개인사업자 번호는 뒤 다섯 자리를 가리고 법인·비영리 등 단체 번호는 전체를 표시한다."""
     if not bizno:
         return None
     if kind in ("CORPORATION", "NONPROFIT_OR_OTHER"):
@@ -207,7 +209,7 @@ CAFE_KEYWORDS = re.compile(
 
 
 def merchant_kind(name):
-    """상호명 기반 업종 추정 (확정이 아니라 추정값)."""
+    """상호에 포함된 단어로 업종을 추정한다."""
     k = (clean_text(name) or "").lower()
     if not k:
         return None
@@ -254,7 +256,7 @@ def split_name_address(name):
 
 
 def council_category(merchant, purpose):
-    """지방의회 지출의 성격 추정: 상호명과 집행목적 문구를 함께 본다 (확정 업종 아님)."""
+    """상호와 집행목적 문구로 지방의회 지출 항목을 추정한다."""
     m, p = (clean_text(merchant) or "").lower(), clean_text(purpose) or ""
     if CONDOLENCE_PURPOSE.search(p):
         return "경조사"

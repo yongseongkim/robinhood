@@ -6,7 +6,7 @@
   직책 수행 경비이고 결제는 비서실·사무국이 할 수 있으므로 개인 지출이라는 뜻이 아니다.
 - 가게: 사업자 거래처만. 결제대행·배달앱처럼 실제 장소가 아닌 곳과 개인에게 지급된 금액은 넣지 않는다.
   전국 체인(스타벅스 등)은 지점이 여러 곳이라 '같은 장소'로 보지 않고, 식대로 분류됐어도 상호가 광고·여행사 등이면 식당 집계에서 뺀다.
-- 가격 차이: 같은 식당에서 다른 결제들의 1인당 금액(중앙값)과 비교해 크게 비싼 결제. 시중가가 아니라 '그 가게의 평소 가격'이 기준이다.
+- 가격 차이는 같은 식당의 결제 기록에서 계산한 1인당 금액 중앙값을 기준으로 구한다. 비교 대상과 제외 조건은 price_gaps에 있다.
 - 다른 공개 파일에 다시 실린 같은 거래(duplicate_of)는 모두 뺀다.
 """
 import re
@@ -19,9 +19,9 @@ TOP = 30          # 화면에는 10위까지 보이고 30위까지 펼쳐 볼 �
 MIN_MEALS = 20    # 평균·비율 순위에 넣을 최소 식사 건수
 MIN_MONTHS = 6    # 월평균 순위에 넣을 최소 개월 수
 YEARS = ("2023", "2024")
-PRICE_MIN_MEALS = 8      # 가게의 '평소 1인당 금액'을 잡으려면 인원이 적힌 결제가 이만큼은 있어야 한다
-PRICE_RATIO = 2.0        # 평소의 2배 이상이면서
-PRICE_EXTRA = 15000      # 1인당 1만5천원 이상 비쌀 때
+PRICE_MIN_MEALS = 8      # 한 식당의 1인당 금액 중앙값을 구하는 데 필요한 최소 식사 결제 건수
+PRICE_RATIO = 2.0        # 해당 결제의 1인당 금액이 그 식당 중앙값의 몇 배 이상이어야 하는지 정한다.
+PRICE_EXTRA = 15000      # 배수 조건과 함께 적용하는 1인당 최소 차액(원)
 PRICE_BASE_MIN = 8000    # 평소 1인당 금액이 이보다 낮은 곳(식권·간식 위주)은 비교하지 않는다
 # 1인당 비교가 맞지 않는 곳: 구내식당 식권·매점·도시락·케이터링은 한 번에 여러 명분을 사는 일이 많다
 PRICE_SKIP = re.compile(r"구내식당|매점|식권|도시락|케이터링|쇼핑|백화점")
@@ -32,7 +32,8 @@ STAFF_FUNDS = ("INSTITUTION_OPERATION", "POLICY_PROMOTION", "DEPARTMENT_OPERATIO
 
 
 def _board(rows, value_at, n=TOP, then=None):
-    """rows를 value_at 열 기준으로 줄 세우고(같으면 then 열), 비교용 중앙값·대상 수를 붙인다."""
+    """value_at 열을 기준으로 내림차순 정렬하고, 동률이면 then 열이 있을 때 그 값이 큰 행을 먼저 둔다.
+    중앙값과 대상 수는 순위를 잘라내기 전 전체 행으로 계산한다."""
     rows = [r for r in rows if r[value_at] is not None]
     vals = [r[value_at] for r in rows]
     key = (lambda r: (-r[value_at], -r[then])) if then is not None else (lambda r: -r[value_at])
@@ -255,7 +256,9 @@ def council_boards(exps, subjects, merchants, registry):
 
 
 def price_gaps(exps, merchants):
-    """같은 식당의 평소 1인당 금액보다 크게 비싼 결제 (지방의회, 인원이 적힌 식사만. OCR로 읽은 행은 인원 오독 위험이 있어 뺀다)."""
+    """지방의회 식사비를 같은 식당의 1인당 금액 중앙값과 비교한다.
+    중앙값에는 비교 중인 결제도 포함한다.
+    인원이 적힌 식사만 비교하며, OCR 행은 인원 오독 가능성이 있어 제외한다."""
     per = defaultdict(list)
     for e in exps:
         if (e["source_id"] == "ka-money" or e.get("category") != "식사" or e["amount"] <= 0 or not e.get("attendees")

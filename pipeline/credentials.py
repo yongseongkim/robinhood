@@ -1,11 +1,12 @@
-"""비밀값(API 인증키) 읽기.
+"""수집에 필요한 API 인증키를 읽는다.
 
-순서: 환경변수(예: ASSEMBLY_API_KEY) → SOPS로 암호화된 프로젝트 루트의 credentials.yaml.
-암호화 키는 GCP KMS 키(.sops.yaml 참고)이고, 복호화에는 gcloud ADC 로그인이 필요하다.
-복호화는 메모리에서만 하고 평문을 파일로 남기지 않는다.
+환경변수(예: ASSEMBLY_API_KEY)에 값이 있으면 그 값을 쓴다.
+없으면 SOPS로 프로젝트 루트의 credentials.yaml에서 해당 키만 복호화한다.
+이때 .sops.yaml에 지정된 GCP KMS 키의 복호화 권한이 있는 ADC가 필요하다.
+복호화한 값은 메모리에서만 사용한다.
 
-키 넣기/바꾸기 (본인 터미널에서):
-    sops credentials.yaml      # 편집기에서 값을 바꾸고 저장하면 다시 암호화된다
+키를 추가하거나 바꿀 때는 터미널에서 sops credentials.yaml을 실행한다.
+편집기에서 저장하면 SOPS가 다시 암호화한다.
 """
 import json
 import os

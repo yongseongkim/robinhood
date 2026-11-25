@@ -1,7 +1,7 @@
-"""Collect 마포구의회 업무추진비 disclosure posts and their attachments (raw, unmodified).
+"""마포구의회 업무추진비 게시글과 첨부 원본을 수집한다.
 
-Usage: .venv/bin/python -I pipeline/collect_mapo.py
-Writes data/raw/mapo/<sha12>_<filename> and data/raw/mapo/manifest.json.
+.venv/bin/python -I pipeline/collect_mapo.py로 실행한다.
+첨부는 data/raw/mapo/<sha12>_<filename>에 보관하고 게시글과 첨부 정보는 같은 디렉터리의 manifest.json에 기록한다.
 """
 import hashlib
 import html

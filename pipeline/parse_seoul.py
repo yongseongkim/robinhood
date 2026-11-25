@@ -1,10 +1,9 @@
-"""서울특별시의회 업무추진비 첨부(PDF·XLSX) → data/staging/seoul.jsonl
+"""서울특별시의회 업무추진비 첨부(PDF·엑셀)를 읽어 data/staging/seoul.jsonl에 기록한다.
 
-- 표의 헤더 이름으로 열을 매핑한다 (서식이 위원회·부서마다 다르다).
-- '사용자' 열이 없으면 게시글 제목에서 직책·위원회를 정한다. 작성자(성명일 수 있음)는 쓰지 않고
-  post_author 로만 남긴다.
-- 의회운영업무추진비는 직책(의장·부의장·상임위원장·교섭단체 대표)의 경비이므로 위원회 게시글이면
-  '<위원회명>위원장', 의정운영공통경비는 '<위원회명>위원회'로 둔다.
+위원회·부서마다 서식이 달라 머리글 이름으로 열을 찾는다.
+‘사용자’ 열이 없으면 게시글 제목에서 직책·위원회를 찾는다.
+작성자명은 개인 성명일 수 있어 post_author에만 남기고 지출 주체를 정하는 데 쓰지 않는다.
+위원회가 올린 의회운영업무추진비는 위원장 직책에, 의정운영공통경비는 위원회에 귀속한다.
 """
 import json
 import re
@@ -24,7 +23,7 @@ OUT = ROOT / "data" / "staging" / "seoul.jsonl"
 REPORT = ROOT / "data" / "staging" / "seoul_parse_report.json"
 warnings.filterwarnings("ignore")
 
-# (키워드, 필드) — 앞에 있는 규칙이 우선. '사용자 및 인원'은 인원 정보라 '인원'을 '사용자'보다 먼저 본다.
+# ‘사용자 및 인원’은 인원 열이므로 ‘인원’을 ‘사용자’보다 먼저 대조한다.
 HEADER_KEYWORDS = [
     ("연번", "row_no"), ("번호", "row_no"), ("순번", "row_no"),
     ("인원", "attendees"), ("집행대상", "attendees"),
@@ -61,7 +60,8 @@ def squash(s):
 
 
 def map_header(cells, sub=None):
-    """{필드: [열 번호...]} — 병합 셀로 같은 이름의 열이 여럿이면 모두 보관하고 값이 있는 첫 열을 쓴다."""
+    """병합 셀 때문에 같은 머리글이 여러 열에 걸칠 수 있어 필드마다 열 번호를 모두 기록한다.
+    거래를 읽을 때는 그중 값이 있는 첫 열을 쓴다."""
     mapping = {}
     carry = ""
     for i, c in enumerate(cells):
@@ -179,7 +179,9 @@ def parse_time(v):
 
 
 def parse_attendees(v):
-    """'부의장외10명' → 11, '직원38명' → 38, '위원장 등 5명' → 5, 12 → 12. 원문은 보관하지 않는다."""
+    """참석자 표기에서 인원수만 추출한다.
+    '부의장외10명'은 부의장을 포함해 11명, '위원장 등 5명'은 5명으로 읽는다.
+    '직원38명'과 숫자 12는 각각 38명과 12명으로 기록한다."""
     if v is None:
         return None
     if isinstance(v, (int, float)):
@@ -621,7 +623,7 @@ def main():
                             continue
                 elif ext in (".xlsx", ".xlsm", ".xls"):
                     per_sheet = [(name, *rows_to_records(rows, ctx)) for name, rows in sheets_xlsx(path)]
-                    # 이전 달 시트가 남아 있는 파일: 공개 기간에 맞는 시트가 있으면 기간이 전혀 안 맞는 시트는 제외
+                    # 지난달 시트가 남아 있을 수 있다. 공개 기간에 해당하는 시트를 찾았으면 해당 기간의 거래가 하나도 없는 시트는 제외한다.
                     fits = [x for x in per_sheet if x[1] and any(in_period(r, ctx["period"]) for r in x[1])]
                     keep = fits if fits else per_sheet
                     kept = {id(x) for x in keep}

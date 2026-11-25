@@ -1,7 +1,7 @@
-"""OhmyNews KA-money (국회의원 정치자금 지출내역) 지원 보고분 수집기.
+"""KA-money에서 2023년 이후 국회의원 정치자금 회계보고와 출처 문서를 수집한다.
 
-GitHub 저장소의 파일명은 NFD로 인코딩되어 있어 raw URL을 손으로 만들면 404가 난다.
-contents API 목록에서 blob SHA를 얻어 그대로 내려받는다.
+원본 파일명의 한글이 NFD 형태라 정규화한 이름으로 raw URL을 조립하면 404 응답을 받을 수 있다.
+GitHub Contents API가 반환한 blob SHA로 파일을 내려받고, 로컬 파일명만 정규화한다.
 """
 import hashlib
 import io

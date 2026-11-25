@@ -34,7 +34,7 @@ HEADER_KEYWORDS = [
     ("시간", "time"), ("시각", "time"),
     ("집행일시", "date"), ("사용일시", "date"), ("일시", "date"), ("집행일", "date"), ("사용일", "date"), ("승인일", "date"), ("일자", "date"), ("날짜", "date"),
     ("금액", "amount"),
-    ("주소", "merchant_address"), ("소재지", "merchant_address"),  # '가맹점주소'가 상호로 잡히지 않도록 먼저 본다
+    ("주소", "merchant_address"), ("소재지", "merchant_address"),  # ‘가맹점주소’가 ‘가맹점’에도 일치하므로 주소 키워드부터 확인한다.
     ("가맹점", "merchant_name"), ("상호", "merchant_name"), ("거래처", "merchant_name"), ("업소", "merchant_name"),
     ("집행장소", "place"), ("사용장소", "place"), ("장소", "place"), ("사용처", "place"), ("집행처", "place"),
     ("주소", "merchant_address"), ("소재지", "merchant_address"), ("위치", "merchant_address"),
@@ -69,7 +69,7 @@ def map_header(cells, sub=None):
         else:
             mapping["merchant_name"] = mapping["place"]
         del mapping["place"]
-    # 집행목적이 '의정운영공통경비지출' 같은 상투 문구이고 '집행내역/집행내용'이 따로 있으면 구체적인 쪽을 먼저 쓴다
+    # ‘집행목적’에 ‘의정운영공통경비지출’ 같은 문구만 적는 서식이 있어, 별도 ‘집행내역’이나 ‘집행내용’ 열을 우선한다.
     if len(mapping.get("purpose", [])) > 1:
         label = lambda j: squash(sub[j]) if sub and j < len(sub) and squash(sub[j]) else squash(cells[j])
         mapping["purpose"].sort(key=lambda j: 0 if ("내역" in label(j) or "내용" in label(j)) else 1)
@@ -132,8 +132,8 @@ def clean_role(raw, ctx):
     r = re.sub(r"\s+", " ", r)
     for bad, good in ROLE_TYPOS.items():
         r = r.replace(bad, good)
-    if "교섭" in r:  # '교섭대표-국민의힘', '교섭단체대표의원(민주)' → '교섭단체 국민의힘'
-        for k in (squash(r), squash(ctx["doc_title"]), squash(ctx["post_title"])):  # 사용자 칸 우선
+    if "교섭" in r:  # 사용자 칸에 적힌 정당부터 확인한다. 예를 들어 ‘교섭대표-국민의힘’은 ‘교섭단체 국민의힘’으로 기록한다.
+        for k in (squash(r), squash(ctx["doc_title"]), squash(ctx["post_title"])):
             for key, party in PARTY:
                 if key in k:
                     return "교섭단체 " + party
@@ -157,9 +157,9 @@ def _is_black(color):
 
 
 def fill_merged_roles(page, table, rows, carry):
-    """세로 병합된 '사용자' 칸: 직책 글자는 블록 가운데 한 번만 찍힌다(종로구 2024년 초 서식).
-    검은 가로선(굵은 테두리)으로 블록을 나누고, 블록 안에 찍힌 직책을 그 블록의 빈 행에 채운다.
-    페이지 첫 블록에 직책이 없으면 앞 페이지 마지막 직책이 이어진 것으로 본다."""
+    """종로구 2024년 초 서식은 세로 병합된 사용자 칸 가운데에 직책을 한 번만 인쇄한다.
+    굵은 검은 가로선 사이를 한 구간으로 보고 그 안에서 찾은 직책을 빈 행에 채운다.
+    첫 구간에 직책이 없으면 앞 페이지 마지막 직책을 이어 쓴다."""
     header = rows[0] if rows else []
     col = next((j for j, c in enumerate(header) if c and "사용자" in squash(c)), None)
     if col is None or not any(len(r) > col and not squash(r[col]) for r in rows[1:]):
@@ -197,7 +197,8 @@ def fill_merged_roles(page, table, rows, carry):
 
 
 def rows_from_words(page, table):
-    """표 추출이 헤더만 돌려주는 PDF(은평 2026년 사무국 서식): 헤더 칸의 x 범위로 단어를 열에 배정해 행을 만든다."""
+    """은평구의회 2026년 사무국 서식은 표 추출 결과에 머리글만 남을 수 있다.
+    이때 머리글 칸의 가로 범위를 기준으로 페이지의 단어를 각 열에 배정해 행을 복원한다."""
     hdr = table.rows[0]
     bounds = [c for c in hdr.cells]
     if any(b is None for b in bounds):
@@ -285,7 +286,8 @@ def raw_rows_pdf(path):
 
 
 def pdf_text_kind(path):
-    """'text' / 'scanned'(이미지) / 'outlined'(글자가 도형으로 변환되어 텍스트 없음)"""
+    """앞 세 페이지에서 페이지당 평균 글자 수가 30 이상이면 text로 분류한다.
+    그보다 적으면 이미지가 있는 PDF는 scanned, 나머지는 글자가 도형일 수 있는 outlined로 분류한다."""
     with pdfplumber.open(path) as pdf:
         pages = pdf.pages[:3]
         chars = sum(len(p.chars) for p in pages)
@@ -522,7 +524,7 @@ def parse(slug, cfg):
         for r in records:
             fh.write(json.dumps(r, ensure_ascii=False) + "\n")
     (STAGING / f"{slug}_parse_report.json").write_text(json.dumps({"files": files}, ensure_ascii=False, indent=1), encoding="utf-8")
-    # 수집 범위는 행 날짜(오기 포함)가 아니라 파싱된 문서의 공개 대상 기간으로 계산
+    # 거래일에 원문 오기가 있을 수 있어 수집 범위는 파싱한 문서의 공개 대상 기간으로 계산한다.
     periods = sorted(m for f in files if f["status"] == "parsed" and f.get("rows") and f.get("period")
                      for m in (period_range(f["period"])[0][:7], period_range(f["period"])[1][:7]))
     reg = {

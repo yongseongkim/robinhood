@@ -132,14 +132,15 @@ class Fetcher:
 
 
 def period_of(title):
-    """게시글 제목에서 공개 대상 기간. common.parse_period가 못 읽는 서식도 처리한다."""
+    """구의회 게시글 제목에서 공개 대상 기간을 읽는다.
+    '2026.7.1. ~ 9.30.'처럼 날짜 범위로 적은 분기도 처리한다."""
     t = title or ""
     m = re.search(r"(20\d{2})\s*\.\s*(\d{1,2})\s*\.\s*\d{1,2}\s*\.?\s*~\s*(?:20\d{2}\s*\.\s*)?(\d{1,2})\s*\.\s*\d{1,2}", t)  # 2026.7.1. ~ 9.30.
     if m:
         y, m1, m2 = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if m2 - m1 == 2 and m1 % 3 == 1:
             return f"{y}-Q{(m1 - 1) // 3 + 1}"
-        return f"{y}-{m1:02d}" if m1 == m2 else None  # 여러 달·연도에 걸친 범위는 기간을 정하지 않는다
+        return f"{y}-{m1:02d}" if m1 == m2 else None  # 날짜 범위가 한 달이나 한 분기로 해석되지 않으면 기간을 비워 둔다.
     m = re.search(r"(20\d{2})\s*\.?\s*년?\s*(\d{1,2})\s*월?\s*~\s*(\d{1,2})\s*월", t)  # 2026.1월~3월, 2025. 10월~12월
     if m:
         y, m1, m2 = int(m.group(1)), int(m.group(2)), int(m.group(3))

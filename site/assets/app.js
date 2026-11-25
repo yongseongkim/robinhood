@@ -1,4 +1,4 @@
-/* Robin Hood — 정적 열람실. 서버 없이 site/data/*.js 조각을 <script>로 불러온다 (file:// 에서도 동작). */
+/* 나랏일보고서 정적 사이트는 site/data/*.js를 <script>로 읽어 index.html을 로컬 파일로 열어도 동작한다. */
 (function () {
   'use strict';
 
@@ -53,7 +53,7 @@
   const pct = (x) => (x == null ? '—' : Math.round(x * 100) + '%');
   const href = (...parts) => '#/' + parts.map(encodeURIComponent).join('/');
 
-  const SOURCE_NAME = { 'ka-money': '국회의원 정치자금', seoul: '서울특별시의회', gwanak: '관악구의회', mapo: '마포구의회' };  // META.councils로 보강
+  const SOURCE_NAME = { 'ka-money': '국회의원 정치자금', seoul: '서울특별시의회', gwanak: '관악구의회', mapo: '마포구의회' };  // 의회 이름은 META.councils에서도 읽는다.
   const SUBJECT_TYPE = {
     LEGISLATOR: '국회의원', COUNCIL_ROLE: '의회 직책', COUNCIL_MEMBER: '사용자로 기재된 의원', COUNCIL_BODY: '위원회·공동경비',
     NEGOTIATION_GROUP: '교섭단체', SECRETARIAT: '의회사무국(공무원)', ORG: '기관',
@@ -149,7 +149,7 @@
   }
 
   // ------------------------------------------------------------------ transactions
-  // build_site.py의 encode()를 되돌린다: 사전 열은 index → 값, 잘린 행 끝은 null
+  // build_site.py의 encode()가 저장한 사전 인덱스를 원래 문자열로 바꾸고 생략된 행 끝을 null로 채운다.
   function decodeRows(t) {
     const c = t.cols, d = t.dict;
     return t.rows.map((r) => {
@@ -320,7 +320,7 @@
   }
 
   function districtColumn() {
-    // 구의회들은 같은 재원 유형끼리만 더한다 (재원끼리는 더하지 않음)
+    // 여러 구의회의 금액을 합칠 때도 재원별로 따로 집계한다.
     const cs = (META.councils || []).filter((c) => c.level !== '광역' && META.sourceStats[c.id]);
     if (!cs.length) return '';
     const byF = {};
@@ -1389,7 +1389,7 @@
     const tx = txObjects(sh);
     const cats = {};
     tx.forEach((t) => (cats[t.category] = (cats[t.category] || 0) + t.amount));
-    // 날짜가 아니라 회계보고 단위로 묶는다 (예비후보 기간 회계에는 전년도 12월 날짜가 섞여 있다)
+    // 예비후보 회계에는 전년도 12월 거래가 섞일 수 있어 회계보고 단위로 묶는다.
     const docLabel = { 'ka:2023': '2023년 회계 (제21대 현직)', 'ka:2024-21': s.precandidate ? '2024년 1~5월 회계 (제22대 총선 예비후보 기간)' : '2024년 1~5월 회계 (제21대)',
       'ka:2024-22': '2024년 6~12월 회계 (제22대)' };
     const top = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 4);

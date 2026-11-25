@@ -211,7 +211,7 @@ def clean_role(cell, fallback):
     if m:
         return re.sub(r"\s+", "", m.group(1)), False
     if NAME_LIKE.match(s.replace(" ", "")) and not ROLE_WORDS.search(s):
-        return fallback, True  # 사람 이름으로 보임 → 쓰지 않음
+        return fallback, True  # 사람 이름만 적혀 있으면 이름을 내보내지 않고 제목에서 찾은 직책을 쓴다.
     return s, False
 
 
@@ -342,7 +342,7 @@ def map_header(row, sub=None):
 
 
 def infer_mapping(rows):
-    """헤더가 없거나 이미지인 표: 값 모양으로 열을 추정."""
+    """머리글이 없거나 이미지여서 읽을 수 없으면 날짜가 들어 있는 행을 표본으로 열의 용도를 추정한다."""
     sample = [r for r in rows if any(DATE_RE.search(str(c or "")) for c in r)][:15]
     if len(sample) < 2:
         return None
@@ -443,7 +443,8 @@ def repair_merged_amounts(recs):
 
 
 def decide_scale(parsed, problems):
-    """헤더가 '천원'이어도 값이 원 단위인 시트가 있다 — 남은 행의 중앙값으로 시트별 판정."""
+    """‘천원’이라고 적힌 시트에도 원 단위 금액이 들어올 수 있다.
+    0을 제외한 금액 절댓값의 중앙값이 5,000 이상이면 이미 원 단위로 보고 배율을 1로 둔다."""
     if not parsed or not any(r["scale"] == 1000 for r in parsed):
         return
     med = statistics.median(abs(r["amount"]) for r in parsed if r["amount"]) if any(r["amount"] for r in parsed) else 0
@@ -456,7 +457,8 @@ def decide_scale(parsed, problems):
 
 
 def enrich_from_logs(parsed, logs):
-    """서대문: 본 시트에 상호·시간이 없고, 같은 파일의 카드 승인 내역 시트에 있다. (날짜, 금액)이 하나로만 맞을 때만 연결."""
+    """서대문구 집행 내역에 빠진 상호와 시각을 같은 파일의 카드 승인 내역에서 찾는다.
+    날짜와 금액으로 두 시트에서 각각 한 행을 특정할 수 있을 때만 연결한다."""
     want = {}
     for p in parsed:
         want.setdefault((p["date"], p["amount"] * p["scale"]), []).append(p)
@@ -473,7 +475,7 @@ def enrich_from_logs(parsed, logs):
         thousand = any(p["scale"] == 1000 for p in parsed)
 
         def keys(d, amt):
-            """본 시트가 천원 단위(반올림·절사)면 승인 금액도 천원으로 맞춰 비교."""
+            """집행 내역이 천 원 단위면 승인 금액을 천 원으로 반올림한 값과 버림한 값을 모두 대조한다."""
             if amt is None:
                 return []
             if not thousand:

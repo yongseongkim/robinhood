@@ -1,11 +1,10 @@
-"""열린국회정보 의정활동(인적사항·대표발의 법률안)을 정치자금 자료의 의원(KA-money 의원번호 주체)과 연결한다.
+"""열린국회정보의 의원 명부·발의 법률안·본회의 표결을 KA-money 정치자금 회계와 연결해 data/normalized/assembly.json에 저장한다.
 
-연결 기준
-- 현직과 보관 명부는 국회의원 코드로 식별하고 회계는 이름·선거구가 함께 일치할 때 연결한다.
-- 법률안·표결: 의원 코드(MONA_CD)가 연결된 현직 의원이면 그 의원. 아니면(제21대만 지낸 의원 등)
-  이름이 해당 대수 정치자금 주체 중 한 명뿐이고, 그 이름으로 나온 (연결 안 된) 의원 코드도 하나뿐일 때만 연결한다.
-  이미 다른 코드로 연결된 주체에는 이름으로 붙이지 않는다 (예: 2026년 보궐로 들어온 동명이인 박지원).
-결과: data/normalized/assembly.json
+현직 명부와 이전 명부의 의원은 국회 의원 코드(MONA_CD)로 식별한다.
+제22대 회계는 이름과 선거구가 함께 맞는 주체가 한 명일 때 연결한다.
+선거구가 바뀐 의원은 해당 대수의 의안·표결에서 이름과 의원 코드가 한 사람으로 확인되면 이전 회계에 연결할 수 있다.
+법률안·표결을 연결할 때는 의원 코드를 먼저 쓰고, 코드로 연결할 수 없는 경우 같은 대수에서 이름과 정당을 확인한다.
+이미 다른 코드와 연결한 회계에는 이름만으로 연결하지 않는다(예: 2026년 보궐선거로 들어온 동명이인 박지원).
 """
 import json
 import re
@@ -74,7 +73,7 @@ def main():
                                           for day, row in history], field: {k: m.get(k) for k in ("MONA_CD", "HG_NM", "POLY_NM", "ORIG_NM", "ELECT_GBN_NM", "CMITS", "REELE_GBN_NM",
                                                           "UNITS", "JOB_RES_NM", "HOMEPAGE")}, "match": how}
 
-    # 이름 → 의원 코드 (대수별). 한 이름에 코드가 둘 이상이면 동명이인이 있으므로 이름으로 연결하지 않는다.
+    # 대수별로 이름에 대응하는 코드를 모은다. 코드가 여럿이면 이름만으로는 의원을 특정할 수 없다.
     codes_by_name = defaultdict(lambda: defaultdict(set))
     parties_by_code = defaultdict(lambda: defaultdict(set))  # 표결 기록의 정당 (동명이인 구분용)
     for age, rows in bills.items():
@@ -113,7 +112,7 @@ def main():
                 and len(codes_by_name[age][name] - set(code_to_sid)) <= 1)
 
     def by_party(age, name, code):
-        """동명이인: 이 의원 코드의 표결 정당이 한결같고, 같은 이름·같은 정당 주체가 하나뿐이면 연결 (예: 제21대 김병욱 두 명)."""
+        """동명이인은 해당 대수의 표결 정당이 하나이고 같은 이름·정당에 해당하는 회계와 의원 코드를 각각 한 사람으로 좁힐 수 있을 때만 연결한다(예: 제21대 김병욱 두 명)."""
         if len(parties_by_code[age][code]) != 1:
             return None
         term, party = f"제{age}대", next(iter(parties_by_code[age][code]))
@@ -201,7 +200,7 @@ def main():
                 cast = cnt["찬성"] + cnt["반대"] + cnt["기권"]
                 entry["votes"][age] = {
                     "counts": dict(cnt), "total": sum(cnt.values()), "participation": cast / sum(cnt.values()) if cnt else None,
-                    # 반대·기권(소신 표결)은 모두, 나머지는 최근 20건만 — 사이트 크기 때문
+                    # 정적 사이트의 파일 크기를 줄이기 위해 최근 목록은 20건만 싣고, 반대·기권은 별도 목록에 모두 싣는다.
                     "dissent": [[d[:4] + "-" + d[4:6] + "-" + d[6:8] if len(d) == 8 else d, n, r] for d, n, r, _ in lst if r in ("반대", "기권")],
                     "recent": [[d[:4] + "-" + d[4:6] + "-" + d[6:8] if len(d) == 8 else d, n, r] for d, n, r, _ in lst[:20]],
                 }

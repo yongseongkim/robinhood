@@ -1,13 +1,12 @@
-"""Raw/Staging → Normalized 계층.
+"""KA-money 회계보고와 지방의회 집행 내역을 공통 형식으로 정규화한다.
 
-입력
-  data/raw/ka-money/*_income_expense.xlsx  (국회의원 정치자금, OCR 데이터)
-  data/staging/{gwanak,mapo}.jsonl          (지방의회 업무추진비, 파서 출력)
-출력 (data/normalized/)
-  expenditures.jsonl   개별 지출 (재원·회계유형별, 금액을 서로 합산하지 않음)
-  subjects.json        지출 주체 (의원 / 의회 직책 / 위원회 / 사무국)
-  merchants.json       거래처 (사업자번호 > 상호+지역 > 상호 순으로 식별)
-  documents.json       원본 문서 (모든 지출은 doc_id로 원본까지 추적 가능)
+국회의원 정치자금은 data/raw/ka-money/의 수입·지출 엑셀에서 읽는다.
+지방의회 경비는 등록된 의회별 data/staging/<slug>.jsonl과 OCR 추출 행을 읽는다.
+결과는 data/normalized/에 저장한다.
+  expenditures.jsonl   재원·회계 유형을 구분한 개별 지출
+  subjects.json        지출 주체(의원·의회 직책·위원회·사무국 등)
+  merchants.json       사업자번호, 상호와 지역, 상호 순으로 식별한 거래처
+  documents.json       지출의 doc_id로 찾을 수 있는 원본 문서 정보
   funding_types.json   재원·회계 유형
 """
 import json
@@ -72,8 +71,8 @@ ACCOUNT_PREFIX = {"후": "후원회기부금", "자": "자산", "보": "보조�
 PAYMENT_RE = re.compile(r"(체크카드|신용카드|카드|계좌입금|계좌이체|자동이체|이체|현금|기타)")
 INDIVIDUAL_CATEGORIES = ("인건비_",)
 
-# 지방의회 전·후반기 (직책 보유자가 바뀌는 단위). 대수는 의회마다 다르다:
-# 2018년 개원 의회가 기초의회(구의회)는 제8대, 서울특별시의회는 제10대 (councils.py의 term_base_2018).
+# 지방의회는 전·후반기에 직책 보유자가 바뀔 수 있어 대수와 전·후반기를 함께 구분한다.
+# 2018년 7월에 개원한 구의회는 제8대, 서울특별시의회는 제10대다(councils.py의 term_base_2018).
 
 
 def council_term(d, source_id):
@@ -468,8 +467,9 @@ def load_council(source_id):
 
 # ---------------------------------------------------------------- 중복 수록 정리
 def mark_cross_document_duplicates(exps):
-    """지방의회가 같은 거래를 서로 다른 공개 파일에 다시 실은 경우, 먼저 실린 행만 합계에 넣는다.
-    (같은 파일 안의 반복은 실제 반복 거래일 수 있어 그대로 둔다. 정치자금은 영수증 번호로 구분하므로 대상 아님.)"""
+    """지방의회 거래가 다른 문서에 다시 실리면 처음 읽은 행을 가리키는 duplicate_of를 기록한다.
+    OCR 문구를 정정해도 같은 거래로 식별할 수 있도록 거래처와 목적은 정정 전 값으로 비교한다.
+    같은 문서 안의 반복은 실제 반복 결제일 수 있어 보존하고, 영수증 번호를 쓰는 정치자금은 이 비교에서 제외한다."""
     seen = {}
     n = 0
     for e in exps:
@@ -550,7 +550,7 @@ def assign_merchants(exps):
         e["_key"] = k
         if e["_bizno"] and k:
             bizno_keys[e["_bizno"]][k] += 1
-    # OCR로 잘못 읽힌 사업자번호: 같은 번호의 대표 상호와 글자가 전혀 겹치지 않으면 번호를 신뢰하지 않는다
+    # OCR에서 번호를 잘못 읽으면 서로 다른 업체가 하나로 묶일 수 있어, 해당 번호의 대표 상호와 names_related로 대조한다.
     for e in exps:
         if e["_bizno"] and e["_key"]:
             main_key = bizno_keys[e["_bizno"]].most_common(1)[0][0]
@@ -588,7 +588,7 @@ def assign_merchants(exps):
                 alias_region[(k, e["_region"])][e["_bizno"]] += 1
 
     # 주소가 없는 행: 같은 공개 자료(source)에서 같은 상호가 한 시·군·구에서만 나오면 그 지역의 거래처로 본다
-    # (예: 서울시의회 '서울시청매점'이 주소 있는 행과 없는 행으로 갈라지던 문제)
+    # 예를 들어 서울시의회 ‘서울시청매점’은 주소가 빠진 행도 같은 거래처에 연결한다.
     src_key_regions = defaultdict(Counter)
     for e in exps:
         if e["_key"] and e["_region"]:

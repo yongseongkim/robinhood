@@ -1,8 +1,8 @@
-"""관악구의회·마포구의회 직책 보유자(의장단·상임위원장) 수집기.
+"""관악구의회와 마포구의회 공식 홈페이지에서 의장단·상임위원장 선출 기록을 수집한다.
 
-의회 공식 홈페이지(역대의장단·의회연혁·역대의원·위원회 구성·공지)만 근거로 쓴다.
-- 가져온 HTML은 data/raw/roles/<sha256 앞 12자리>_<이름>.html 로 원본 그대로 보관, manifest.json에 URL·sha256·수집 시각 기록
-- 결과: data/staging/role_holders.json (페이지에서 직접 읽은 사실만, 근거 문구 포함)
+역대 의장단, 의회연혁, 역대 의원, 위원회 구성과 공지에서 직접 확인한 내용만 쓴다.
+HTML 원본은 data/raw/roles/<sha256 앞 12자리>_<이름>.html에 보관하고 URL·해시·수집 시각을 manifest.json에 기록한다.
+확인한 직책과 보유자는 근거 문구와 함께 data/staging/role_holders.json에 저장한다.
 """
 import hashlib
 import html
@@ -40,7 +40,8 @@ def save_manifest():
 
 
 def fetch(url, name, referer=None, refresh=False):
-    """URL을 가져와 원본을 보관하고 텍스트를 돌려준다. 이미 받은 URL은 보관본을 쓴다."""
+    """페이지 원본을 보관하고 본문을 문자열로 반환한다.
+    같은 URL의 보관본이 있으면 재사용하되 refresh=True이면 새로 받는다."""
     OUT.mkdir(parents=True, exist_ok=True)
     m = manifest().get(url)
     if m and not refresh and (ROOT / m["local_path"]).exists():
@@ -169,7 +170,7 @@ def mapo_history():
 
 
 def mapo_chairmanlist_check(records):
-    """역대의장단 페이지와 교차 확인 (화면에 보이는 내용만). 불일치 목록을 돌려준다."""
+    """수집한 기수별 직책·성명을 역대 의장단 페이지에 보이는 목록과 대조해 한쪽에만 있는 기록을 반환한다."""
     t = page_text(M + "/kr/member/cmsChairmanlist.do", "mapo_chairmanlist")
     issues = []
     for block in re.split(r"\n(?=제\d+대 의회 (?:전반기|후반기)\n)", t):

@@ -78,7 +78,7 @@ def jurisdiction_areas(registry):
         area = {region}
         for f in own:
             area.add(key[f["code"]])
-            # 한 점으로만 맞닿은 경우(touches)도 '경계를 접한' 것으로 본다 — 표시를 덜 하는 쪽(보수적) 해석
+            # 한 점에서만 만나는 지역(touches)도 관할에 포함해 경계 근처 지출을 관할 밖 사용으로 잘못 표시할 가능성을 줄인다.
             for a in f.get("adjacent", []) + f.get("touches", []):
                 if a in by_code:
                     area.add(key[a])

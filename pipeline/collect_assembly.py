@@ -1,9 +1,8 @@
-"""열린국회정보(국회사무처) Open API 수집 → data/raw/assembly/
+"""열린국회정보에서 현직 국회의원 명부와 제21·22대 발의 법률안을 수집해 data/raw/assembly/에 보관한다.
 
-- 국회의원 인적사항 (nwvrqwxyaytdsfvhu): 현직 의원
-- 국회의원 발의법률안 (nzmimeepazxkubdpn): 제21대·제22대
-인증키는 credentials.yaml(SOPS)에서 메모리로만 읽고, 파일·로그·manifest에 남기지 않는다.
-개인정보 최소화: 생년월일·전화·이메일·보좌진·약력·사무실 주소 필드는 저장하지 않는다.
+명부는 nwvrqwxyaytdsfvhu, 발의 법률안은 nzmimeepazxkubdpn 서비스를 사용한다.
+인증키는 credentials.get으로 읽고 파일·로그·manifest에 기록하지 않는다.
+명부에서 생년월일·전화번호·이메일·보좌진·약력·사무실 주소는 저장하지 않는다.
 """
 import hashlib
 import json

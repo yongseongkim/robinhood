@@ -347,8 +347,8 @@ def main():
         st["byFunding"] = {k: {"count": v[0], "amount": v[1]} for k, v in st["byFunding"].items()}
         st["subjects"] = len(st["subjects"])
 
-    # 처음 화면의 예시: 1인당 식사비가 기준의 1.2배 이상인 거래 중 가장 최근 것
-    # (선정 기준이 '최근'일 뿐 특정 주체를 지목하려는 것이 아님)
+    # 첫 화면에서는 1인당 식사비가 해당 날짜 기준의 1.2배 이상인 거래 중 날짜와 시각이 가장 최근인 거래를 예시로 쓴다.
+    # 예시는 특정 주체를 지목하지 않도록 거래 시점으로 고른다.
     by_id = {e["id"]: e for e in exps}
     example = None
     for f in findings:
@@ -367,7 +367,7 @@ def main():
     reviews_path = ROOT / "data" / "reviews.json"
     reviews = json.loads(reviews_path.read_text()) if reviews_path.exists() else {}
 
-    # 직책 보유자 → 사람 목록 (의회 공식 홈페이지 기준). 지출은 여전히 직책 단위이며 사람 페이지는 직책 이력을 모아 보여줄 뿐이다.
+    # 의회 공식 기록에서 한 사람이 맡았던 직책을 모아 표시한다. 각 지출은 당시 직책에 귀속한다.
     people = {}
     for sj in subjects:
         for h in sj.get("holders") or []:

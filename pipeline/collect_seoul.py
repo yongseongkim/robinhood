@@ -1,11 +1,9 @@
-"""서울특별시의회 업무추진비 공개 게시판 수집기 (제11대, 2022-07 이후 공개분).
+"""서울특별시의회 업무추진비 게시판에서 제11대가 시작된 2022년 7월 이후 공개분을 수집한다.
 
 https://www.smc.seoul.kr/board/BoardList.do?boardTypeId=158&menuId=001007013001
-- 목록(30건씩)에서 게시글을 모은 뒤, 게시글 상세에서 첨부파일 전체를 확인한다
-  (목록에는 첫 번째 첨부만 보이는 경우가 있다).
-- 첨부는 POST /board/fileDown.do 로 받는다. 사람이 열어 볼 링크로는 GET 가능한
-  /common/fileTrans.do (문서 뷰어) 주소를 기록한다.
-- data/raw/seoul/<sha256 앞 12자리>_<원본 파일명>, data/raw/seoul/manifest.json
+목록에는 첫 번째 첨부만 보일 수 있어 게시글을 30건씩 읽고 상세 페이지에서 전체 첨부를 확인한다.
+파일은 POST /board/fileDown.do로 받고, 원문 링크는 브라우저에서 GET으로 열 수 있는 /common/fileTrans.do 뷰어 주소를 기록한다.
+첨부는 data/raw/seoul/<sha256 앞 12자리>_<원본 파일명>에 보관하고 게시글과 첨부 정보는 같은 디렉터리의 manifest.json에 기록한다.
 """
 import hashlib
 import html
@@ -28,7 +26,7 @@ DOWN_URL = BASE + "/board/fileDown.do"
 OUT = RAW / "seoul"
 KST = timezone(timedelta(hours=9))
 SINCE = "2022-07"  # 제11대 서울특별시의회 (2022-07-01 개원)
-SLEEP = 1.0  # 0.5초 간격에서 503(Service Temporarily Unavailable)을 받은 적이 있어 늦춤
+SLEEP = 1.0  # 0.5초 간격으로 요청했을 때 HTTP 503을 받은 적이 있어 요청 사이에 더 오래 기다린다.
 
 session = requests.Session()
 session.headers.update({

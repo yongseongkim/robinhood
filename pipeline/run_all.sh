@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 전체 파이프라인: 수집 → 파싱 → 정규화 → 탐지 → 사이트 데이터 생성
+# 기관별 자료를 수집·파싱하고 정규화와 탐지를 실행한다. 정적 사이트를 배포할 때는 화면용 데이터도 만든다.
 # 사용법: pipeline/run_all.sh            (수집부터 전부)
 #        pipeline/run_all.sh --no-fetch  (이미 받은 원본으로 재처리만)
 set -euo pipefail
@@ -7,8 +7,8 @@ cd "$(dirname "$0")/.."
 PY="${ROBINHOOD_PIPELINE_PYTHON:-.venv/bin/python}"
 if [[ "${1:-}" != "--no-fetch" ]]; then
   $PY pipeline/collect_ka_money.py
-  $PY pipeline/collect_assembly.py   # 열린국회정보 (credentials.yaml의 인증키 필요, 없으면 건너뜀)
-  $PY pipeline/collect_votes.py      # 본회의 표결: 새로 처리된 의안만 받음 (처음엔 약 1.5시간, 1초에 1회)
+  $PY pipeline/collect_assembly.py   # 열린국회정보 인증키는 환경변수 또는 credentials.yaml에서 읽는다.
+  $PY pipeline/collect_votes.py      # 의안별 표결을 1초 간격으로 조회한다. 최초 수집 예상 시간은 약 1.5시간이며 이후에는 저장본을 재사용한다.
   $PY pipeline/collect_fiscal.py     # 열린재정 나라 살림 (openfiscal_api_key 필요, 없으면 건너뜀)
   $PY pipeline/collect_assets.py     # 국회공보 정기재산공개 PDF (최신 호만, 이미 받았으면 건너뜀)
   $PY pipeline/collect_peti.py
@@ -25,7 +25,7 @@ $PY pipeline/parse_mapo.py
 $PY pipeline/parse_seoul.py
 for g in pipeline/districts/g*.py; do [[ "$g" == *_* ]] || $PY "$g" parse; done
 $PY pipeline/parse_ocr.py
-# 서버 job이 지정한 정정 단계. 원본·OCR 추출본은 유지하고 별도 정정본만 만든다.
+# 서버 worker가 지정한 Python으로 정정 단계를 실행한다. 검증된 정정본은 원본·OCR 추출본과 별도로 보관한다.
 if [[ -n "${ROBINHOOD_OCR_CORRECTION_PYTHON:-}" ]]; then
   "$ROBINHOOD_OCR_CORRECTION_PYTHON" -m robinhood_server.ocr_correction
 fi

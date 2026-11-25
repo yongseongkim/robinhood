@@ -19,7 +19,7 @@ def test_location_keeps_only_up_to_eupmyeondong():
 def test_amount_reads_first_line_only():
     assert amount("1,332,968") == 1332968
     assert amount("-30,501") == -30501
-    assert amount("10,370\n(3,000)") == 10370  # 괄호는 실거래가격
+    assert amount("10,370\n(3,000)") == 10370  # 둘째 줄은 실거래가격이므로 신고가액에는 첫 줄의 10,370천 원만 쓴다.
     assert amount("-") is None and amount(None) is None
 
 
